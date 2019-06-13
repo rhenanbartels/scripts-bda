@@ -8,5 +8,5 @@ spark2-submit \
     --num-executors 50 \
     --executor-cores 1 \
     --executor-memory 8g \
-    --py-files timer.py,base.py,packages/*.whl,packages/*.egg \
-    save_file_pdf.py
+    --py-files src/timer.py,src/base.py,packages/*.whl,packages/*.egg \
+    src/save_file_pdf.py

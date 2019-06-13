@@ -2,17 +2,20 @@ from hdfs import InsecureClient
 from os import path
 import happybase
 from base import spark
+from decouple import config
 
 
-server = spark.conf.get("spark.server")
-user_name_hdfs = spark.conf.get("spark.hdfs.user")
-dir_files_pdf = spark.conf.get("spark.hdfs.dir")
-url_oracle_server = spark.conf.get("spark.url.oracle.server")
-table_oracle = spark.conf.get("spark.table.oracle")
-user_oracle = spark.conf.get("spark.jdbc.user")
-passwd_oracle = spark.conf.get("spark.jdbc.password")
+url_oracle_server = config('ORACLE_SERVER')
+user_oracle = config("ORACLE_USER")
+passwd_oracle = config("ORACLE_PASSWORD")
 
-server_hdfs = 'http://{}:50070'.format(server)
+dir_files_pdf = config('DIR_FILES_PDF')
+server = config('HDFS_SERVER')
+user_name_hdfs = config('HDFS_USER')
+
+server_hdfs = 'http://%s:50070' % server
+table_oracle = "GATE.GATE_INFO_TECNICA"
+
 
 """ 
     Connection to hbase

@@ -22,7 +22,6 @@ with timer():
     spark.sql("SET hive.mapred.supports.subdirectories=true")
     spark.sql("SET mapreduce.input.fileinputformat.input.dir.recursive=true")
 
-    sc.setCheckpointDir('hdfs:///user/felipeferreira/temp')
 
     spark.sql('create database if not exists %s' % BASES)
     spark.sql('create database if not exists %s' % DADOSSINAPSE)
