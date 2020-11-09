@@ -238,7 +238,7 @@ def execute_process(options):
     table_name = "{}.{}".format(schema_exadata_aux, table_name)
     pessoas_representativas_2.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
     temp_table = spark.table("temp_table_pip_investigados_representantes")
-    temp_table.write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
+    temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_representantes")
 
     execute_compute_stats(table_name)

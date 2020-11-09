@@ -128,7 +128,7 @@ def execute_process(options):
     table_name = "{}.{}".format(schema_exadata_aux, table_name_procedimentos)
     documentos_investigados.repartition("rep_last_digit").write.mode("overwrite").saveAsTable("temp_table_pip_investigados_procedimentos")
     temp_table = spark.table("temp_table_pip_investigados_procedimentos")
-    temp_table.write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
+    temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_procedimentos")
 
     execute_compute_stats(table_name)
@@ -178,7 +178,7 @@ def execute_process(options):
     table_name = "{}.{}".format(schema_exadata_aux, table_name_investigados)
     table.repartition('orgao_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados")
     temp_table = spark.table("temp_table_pip_investigados")
-    temp_table.write.mode("overwrite").partitionBy('orgao_last_digit').saveAsTable(table_name)
+    temp_table.repartition(10).write.mode("overwrite").partitionBy('orgao_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados")
 
     execute_compute_stats(table_name)
