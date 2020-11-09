@@ -122,15 +122,13 @@ def execute_process(options):
         LEFT JOIN assuntos TASSU ON asdo_docu_dk = D.docu_dk
         LEFT JOIN {0}.mcpr_fases_documento ON docu_fsdc_dk = fsdc_dk
         LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = pip_codigo
-        WHERE cod_pct IN (20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 180, 181, 182, 183,
-            200, 201, 202, 203, 204, 205, 206, 207, 208, 209)
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name_procedimentos = options['table_name_procedimentos']
     table_name = "{}.{}".format(schema_exadata_aux, table_name_procedimentos)
-    documentos_investigados.write.mode("overwrite").saveAsTable("temp_table_pip_investigados_procedimentos")
+    documentos_investigados.repartition("rep_last_digit").write.mode("overwrite").saveAsTable("temp_table_pip_investigados_procedimentos")
     temp_table = spark.table("temp_table_pip_investigados_procedimentos")
-    temp_table.coalesce(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
+    temp_table.write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_procedimentos")
 
     execute_compute_stats(table_name)
@@ -178,9 +176,9 @@ def execute_process(options):
 
     table_name_investigados = options['table_name_investigados']
     table_name = "{}.{}".format(schema_exadata_aux, table_name_investigados)
-    table.write.mode("overwrite").saveAsTable("temp_table_pip_investigados")
+    table.repartition('orgao_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados")
     temp_table = spark.table("temp_table_pip_investigados")
-    temp_table.coalesce(15).write.mode("overwrite").partitionBy('orgao_last_digit').saveAsTable(table_name)
+    temp_table.write.mode("overwrite").partitionBy('orgao_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados")
 
     execute_compute_stats(table_name)
