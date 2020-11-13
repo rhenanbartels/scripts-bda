@@ -107,7 +107,7 @@ def execute_process(options):
             docu_nr_mp,
             pess_nm_pessoa,
             B.representante_dk,
-            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY A.pess_dk DESC) as nr_pers
+            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY B.representante_dk ASC) as nr_pers
         FROM PERSONAGENS_SIMILARIDADE A
         LEFT JOIN {1}.tb_pip_investigados_representantes B ON A.pess_dk = B.pess_dk
         WHERE primeira_aparicao = true

@@ -47,7 +47,9 @@ def execute_process(options):
     # Sem espaços pois a função clean_name remove os espaços dos nomes
     REGEX_EXCLUSAO_ORGAOS = (
         "(^MP$|MINIST[EÉ]RIOP[UÚ]BLICO|DEFENSORIAP[UÚ]BLICA"
-        "|MINSTERIOPUBLICO|MPRJ|MINITÉRIOPÚBLICO|JUSTI[ÇC]AP[UÚ]BLICA)"
+        "|MINSTERIOPUBLICO|MPRJ|MINIT[EÉ]RIOP[UÚ]BLICO|JUSTI[ÇC]AP[UÚ]BLICA"
+        "|PROMOTORIA(DETUTELA|DEJUSTICA|DEINVESTIGACAO|MILITAR|CRIMINAL|DACIDADANIA|DAINFANCIA|PUBLICA|CIVEL|DEMEIOAMBIENTE|DEPROTECAOAOIDOSO)"
+        "|(PRIMEIRA|SEGUNDA)PROMOTORIA)"
     )
 
     PERS_DOCS_PIPS = spark.sql("""
@@ -69,8 +71,9 @@ def execute_process(options):
             regexp_replace(pesf_nr_rg, '[^0-9]', '') as pesf_nr_rg
         FROM PERS_DOCS_PIPS
         JOIN {0}.mcpr_pessoa_fisica ON pers_pess_dk = pesf_pess_dk
-        WHERE pesf_nm_pessoa_fisica NOT REGEXP '{REGEX_EXCLUSAO_ORGAOS}'
-    """.format(schema_exadata, REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS))
+        WHERE clean_name(pesf_nm_pessoa_fisica) NOT REGEXP '{REGEX_EXCLUSAO_ORGAOS}'
+        AND NOT name_similarity(substring(clean_name(pesf_nm_pessoa_fisica), 1, 17), 'MINISTERIOPUBLICO') > {LIMIAR_SIMILARIDADE}
+    """.format(schema_exadata, REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS, LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
     investigados_fisicos_pip_total.createOrReplaceTempView("INVESTIGADOS_FISICOS_PIP_TOTAL")
     spark.catalog.cacheTable('INVESTIGADOS_FISICOS_PIP_TOTAL')
 
@@ -80,8 +83,10 @@ def execute_process(options):
         pesj_cnpj
         FROM PERS_DOCS_PIPS
         JOIN {0}.mcpr_pessoa_juridica ON pers_pess_dk = pesj_pess_dk
-        WHERE pesj_nm_pessoa_juridica NOT REGEXP '{REGEX_EXCLUSAO_ORGAOS}'
-    """.format(schema_exadata, REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS))
+        WHERE clean_name(pesj_nm_pessoa_juridica) NOT REGEXP '{REGEX_EXCLUSAO_ORGAOS}'
+        AND (pesj_cnpj IS NULL OR pesj_cnpj != '28305936000140') -- Sem o IS NULL OR ele tira os valores NULL
+        AND NOT name_similarity(substring(clean_name(pesj_nm_pessoa_juridica), 1, 17), 'MINISTERIOPUBLICO') > {LIMIAR_SIMILARIDADE}
+    """.format(schema_exadata, REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS, LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
     investigados_juridicos_pip_total.createOrReplaceTempView("INVESTIGADOS_JURIDICOS_PIP_TOTAL")
 
     # PARTITION BY substring(pesf_nm_pessoa_fisica, 1, 1)
