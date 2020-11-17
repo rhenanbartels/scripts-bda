@@ -80,11 +80,11 @@ def execute_process(options):
             WITH PERSONAGENS AS (SELECT
                 docu_nr_mp,
                 pess_dk,
+                CASE WHEN concat_ws(', ', collect_list(cast(tppe_dk as int))) REGEXP '(^| )(290|7|21|317|20|14|32|345|40|5|24)(,|$)' THEN 1 ELSE 0 END AS is_investigado,
                 pess_nm_pessoa,
                 LEAD(pess_nm_pessoa) OVER (PARTITION BY docu_nr_mp ORDER BY pess_nm_pessoa) proximo_nome
             FROM DOCU_TOTAIS
             JOIN {0}.mcpr_personagem ON pers_docu_dk = docu_dk
-            AND pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
             JOIN {0}.mcpr_pessoa ON pers_pess_dk = pess_dk
             JOIN {0}.mcpr_tp_personagem ON pers_tppe_dk = tppe_dk
             AND (
@@ -97,6 +97,7 @@ def execute_process(options):
         SELECT docu_nr_mp,
         pess_dk,
         pess_nm_pessoa,
+        is_investigado,
             CASE
                 WHEN name_similarity(pess_nm_pessoa, proximo_nome) > {LIMIAR_SIMILARIDADE} THEN false
                 ELSE true
@@ -107,9 +108,18 @@ def execute_process(options):
             docu_nr_mp,
             pess_nm_pessoa,
             B.representante_dk,
-            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY B.representante_dk ASC) as nr_pers
+            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY B.has_dk DESC, A.is_investigado DESC) as nr_pers
         FROM PERSONAGENS_SIMILARIDADE A
-        LEFT JOIN {1}.tb_pip_investigados_representantes B ON A.pess_dk = B.pess_dk
+        LEFT JOIN (
+            SELECT pess_dk, R.representante_dk, 1 as has_dk FROM {1}.test_tb_pip_investigados_representantes R
+            JOIN
+            (
+                SELECT DISTINCT representante_dk
+                FROM {1}.test_tb_pip_investigados_representantes
+                JOIN {0}.mcpr_personagem ON pess_dk = pers_pess_dk
+                WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
+            ) RI ON RI.representante_dk = R.representante_dk
+        ) B ON A.pess_dk = B.pess_dk
         WHERE primeira_aparicao = true
         """.format(
             schema_exadata, schema_exadata_aux,
@@ -179,7 +189,7 @@ def execute_process(options):
         """
     )
 
-    table_name = "{}.{}".format(schema_exadata_aux, table_name)
+    table_name = "{}.test_{}".format(schema_exadata_aux, table_name)
 
     lista_investigacoes.write.mode("overwrite").saveAsTable("temp_table_lista_investigacoes")
     temp_table = spark.table("temp_table_lista_investigacoes")

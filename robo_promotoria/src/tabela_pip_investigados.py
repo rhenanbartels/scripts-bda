@@ -50,11 +50,21 @@ def execute_process(options):
     """.format(schema_exadata, schema_exadata_aux))
     assuntos.createOrReplaceTempView('assuntos')
 
+    representantes_investigados = spark.sql("""
+        SELECT DISTINCT representante_dk
+        FROM {1}.test_tb_pip_investigados_representantes
+        JOIN {0}.mcpr_personagem ON pess_dk = pers_pess_dk
+        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
+    """.format(schema_exadata, schema_exadata_aux)
+    )
+    representantes_investigados.createOrReplaceTempView('representantes_investigados')
+
     documentos_pips = spark.sql("""
         SELECT 
-            representante_dk,
+            R.representante_dk,
             R.pess_dk,
             concat_ws(', ', collect_list(tppe_descricao)) as tppe_descricao,
+            concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
             docu_orgi_orga_dk_responsavel as pip_codigo,
             docu_dk,
             docu_nr_mp,
@@ -66,13 +76,14 @@ def execute_process(options):
             concat_ws(', ', collect_list(pers_dk)) as pers_dk
         FROM {0}.mcpr_personagem
         JOIN {0}.mcpr_tp_personagem ON tppe_dk = pers_tppe_dk
-        JOIN {1}.tb_pip_investigados_representantes R ON pers_pess_dk = R.pess_dk
+        JOIN {1}.test_tb_pip_investigados_representantes R ON pers_pess_dk = R.pess_dk
+        JOIN representantes_investigados RI ON RI.representante_dk = R.representante_dk
         JOIN {0}.mcpr_documento ON docu_dk = pers_docu_dk
-        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
-        AND docu_tpst_dk != 11
-        GROUP BY representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
+        WHERE docu_tpst_dk != 11
+        GROUP BY R.representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
     """.format(schema_exadata, schema_exadata_aux))
     documentos_pips.createOrReplaceTempView('documentos_pips')
+    spark.catalog.cacheTable('documentos_pips')
 
     documentos_investigados = spark.sql("""
         WITH docs_representantes AS (
@@ -99,6 +110,7 @@ def execute_process(options):
             D.representante_dk,
             coautores,
             tppe_descricao,
+            tppe_dk,
             pip_codigo,
             D.docu_dk,
             D.docu_nr_mp,
@@ -125,22 +137,29 @@ def execute_process(options):
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name_procedimentos = options['table_name_procedimentos']
-    table_name = "{}.{}".format(schema_exadata_aux, table_name_procedimentos)
+    table_name = "{}.test_{}".format(schema_exadata_aux, table_name_procedimentos)
     documentos_investigados.repartition("rep_last_digit").write.mode("overwrite").saveAsTable("temp_table_pip_investigados_procedimentos")
     temp_table = spark.table("temp_table_pip_investigados_procedimentos")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_procedimentos")
 
+    spark.catalog.clearCache()
+
     execute_compute_stats(table_name)
 
     # Contagem só será utilizada pela PIP e para PIPs, pelo menos por enquanto
     table = spark.sql("""
-        WITH DISTINCT_DOCS_COUNT AS (
-            SELECT representante_dk, COUNT(DISTINCT docu_dk) as nr_investigacoes, MAX(docu_dt_cadastro) as max_docu_date
-            FROM {1}.tb_pip_investigados_procedimentos
-            JOIN {0}.mcpr_pessoa P ON P.pess_dk = representante_dk
-            WHERE P.pess_nm_pessoa NOT REGEXP 'IDENTIFICADO|IGNORAD[OA]|P[UÚ]BLICO|JUSTI[CÇ]A P[UÚ]BLICA|APURA[CÇ][AÃ]O'
+        WITH DOCS_INVESTIGADOS_FILTERED AS (
+            SELECT representante_dk, pess_dk, docu_dk, docu_dt_cadastro, pip_codigo, fsdc_ds_fase
+            FROM {1}.test_tb_pip_investigados_procedimentos
+            WHERE tppe_dk REGEXP '(^| )(290|7|21|317|20|14|32|345|40|5|24)(,|$)' -- apenas os investigados na contagem
             AND cod_pct IN (200, 201, 202, 203, 204, 205, 206, 207, 208, 209)
+        ),
+        DISTINCT_DOCS_COUNT AS (
+            SELECT representante_dk, COUNT(DISTINCT docu_dk) as nr_investigacoes, MAX(docu_dt_cadastro) as max_docu_date
+            FROM DOCS_INVESTIGADOS_FILTERED
+            JOIN {0}.mcpr_pessoa P ON P.pess_dk = representante_dk
+            WHERE P.pess_nm_pessoa NOT REGEXP 'IDENTIFICADO|IGNORAD[OA]|APURA[CÇ][AÃ]O'
             GROUP BY representante_dk
         )
         SELECT 
@@ -154,14 +173,14 @@ def execute_process(options):
             FROM DISTINCT_DOCS_COUNT c
             JOIN (
                 SELECT representante_dk, pip_codigo
-                FROM {1}.tb_pip_investigados_procedimentos
+                FROM DOCS_INVESTIGADOS_FILTERED
                 GROUP BY representante_dk, pip_codigo
                 HAVING SUM(CASE WHEN fsdc_ds_fase = "Em Andamento" THEN 1 ELSE 0 END) > 0
             ) r
                 ON c.representante_dk = r.representante_dk) t
         LEFT JOIN (
             SELECT representante_dk, True as flag_multipromotoria
-            FROM {1}.tb_pip_investigados_procedimentos
+            FROM DOCS_INVESTIGADOS_FILTERED
             GROUP BY representante_dk
             HAVING COUNT(DISTINCT pip_codigo) > 1
         ) MULTI ON MULTI.representante_dk = t.representante_dk
@@ -175,7 +194,7 @@ def execute_process(options):
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name_investigados = options['table_name_investigados']
-    table_name = "{}.{}".format(schema_exadata_aux, table_name_investigados)
+    table_name = "{}.test_{}".format(schema_exadata_aux, table_name_investigados)
     table.repartition('orgao_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados")
     temp_table = spark.table("temp_table_pip_investigados")
     temp_table.repartition(10).write.mode("overwrite").partitionBy('orgao_last_digit').saveAsTable(table_name)
@@ -184,57 +203,57 @@ def execute_process(options):
     execute_compute_stats(table_name)
 
 
-    # Investigados que aparecem em documentos novos reiniciam flags no HBase
-    table_name_dt_checked = options['table_name_dt_checked']
-    is_exists_dt_checked = check_table_exists(spark, schema_exadata_aux, table_name_dt_checked)
-    current_time = datetime.now()
+    # # Investigados que aparecem em documentos novos reiniciam flags no HBase
+    # table_name_dt_checked = options['table_name_dt_checked']
+    # is_exists_dt_checked = check_table_exists(spark, schema_exadata_aux, table_name_dt_checked)
+    # current_time = datetime.now()
 
-    if not is_exists_dt_checked:
-        new_names = spark.sql("""
-            SELECT pip_codigo, collect_list(representante_dk) as representantes
-            FROM {0}.tb_pip_investigados_procedimentos
-            WHERE docu_dt_cadastro > '{1}'
-            GROUP BY pip_codigo
-        """.format(schema_exadata_aux, str(current_time - timedelta(minutes=20)))).collect()
-    else:
-        new_names = spark.sql("""
-            SELECT pip_codigo, collect_list(representante_dk) as representantes
-            FROM {0}.tb_pip_investigados_procedimentos
-            JOIN {0}.dt_checked_investigados
-            WHERE docu_dt_cadastro > dt_ultima_verificacao
-            GROUP BY pip_codigo
-        """.format(schema_exadata_aux)).collect()
+    # if not is_exists_dt_checked:
+    #     new_names = spark.sql("""
+    #         SELECT pip_codigo, collect_list(representante_dk) as representantes
+    #         FROM {0}.tb_pip_investigados_procedimentos
+    #         WHERE docu_dt_cadastro > '{1}'
+    #         GROUP BY pip_codigo
+    #     """.format(schema_exadata_aux, str(current_time - timedelta(minutes=20)))).collect()
+    # else:
+    #     new_names = spark.sql("""
+    #         SELECT pip_codigo, collect_list(representante_dk) as representantes
+    #         FROM {0}.tb_pip_investigados_procedimentos
+    #         JOIN {0}.dt_checked_investigados
+    #         WHERE docu_dt_cadastro > dt_ultima_verificacao
+    #         GROUP BY pip_codigo
+    #     """.format(schema_exadata_aux)).collect()
 
-    conn = KerberosConnection(
-            'bda1node05.pgj.rj.gov.br',
-            timeout=3000,
-            use_kerberos=True,
-            protocol="compact",
-        )
-    #conn = Connection('bda1node05.pgj.rj.gov.br')
-    t = conn.table('{}:pip_investigados_flags'.format(schema_hbase))
-    for orgao in new_names:
-        orgao_id = str(orgao['pip_codigo'])
-        representantes = orgao['representantes']
-        removed_rows = t.scan(
-            row_prefix=orgao_id,
-            filter=(
-                "DependentColumnFilter ('flags', 'is_removed')"
-            )
-        )
-        for row in removed_rows:
-            if row[1].get("identificacao:representante_dk") and row[1]["identificacao:representante_dk"].decode('utf-8') in representantes:
-                t.delete(row[0])
+    # conn = KerberosConnection(
+    #         'bda1node05.pgj.rj.gov.br',
+    #         timeout=3000,
+    #         use_kerberos=True,
+    #         protocol="compact",
+    #     )
+    # #conn = Connection('bda1node05.pgj.rj.gov.br')
+    # t = conn.table('{}:pip_investigados_flags'.format(schema_hbase))
+    # for orgao in new_names:
+    #     orgao_id = str(orgao['pip_codigo'])
+    #     representantes = orgao['representantes']
+    #     removed_rows = t.scan(
+    #         row_prefix=orgao_id,
+    #         filter=(
+    #             "DependentColumnFilter ('flags', 'is_removed')"
+    #         )
+    #     )
+    #     for row in removed_rows:
+    #         if row[1].get("identificacao:representante_dk") and row[1]["identificacao:representante_dk"].decode('utf-8') in representantes:
+    #             t.delete(row[0])
 
-    # Usa tabela para guardar a data de ultima verificacao de novos documentos
-    tb_ultima_verificacao = spark.sql("""
-        SELECT '{0}' as dt_ultima_verificacao
-    """.format(str(current_time)))
+    # # Usa tabela para guardar a data de ultima verificacao de novos documentos
+    # tb_ultima_verificacao = spark.sql("""
+    #     SELECT '{0}' as dt_ultima_verificacao
+    # """.format(str(current_time)))
 
-    table_name = "{}.{}".format(schema_exadata_aux, table_name_dt_checked)
-    tb_ultima_verificacao.write.mode("overwrite").saveAsTable(table_name)
+    # table_name = "{}.{}".format(schema_exadata_aux, table_name_dt_checked)
+    # tb_ultima_verificacao.write.mode("overwrite").saveAsTable(table_name)
 
-    execute_compute_stats(table_name)
+    # execute_compute_stats(table_name)
 
 
 if __name__ == "__main__":

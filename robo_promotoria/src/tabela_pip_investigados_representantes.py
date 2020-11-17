@@ -55,7 +55,7 @@ def execute_process(options):
     PERS_DOCS_PIPS = spark.sql("""
         SELECT DISTINCT pers_pess_dk
         FROM {0}.mcpr_personagem
-        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
+        --WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
     """.format(schema_exadata))
     PERS_DOCS_PIPS.createOrReplaceTempView('PERS_DOCS_PIPS')
     spark.catalog.cacheTable('PERS_DOCS_PIPS')
@@ -240,7 +240,7 @@ def execute_process(options):
     """.format(schema_exadata))
 
     table_name = options['table_name']
-    table_name = "{}.{}".format(schema_exadata_aux, table_name)
+    table_name = "{}.test_{}".format(schema_exadata_aux, table_name)
     pessoas_representativas_2.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
     temp_table = spark.table("temp_table_pip_investigados_representantes")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
