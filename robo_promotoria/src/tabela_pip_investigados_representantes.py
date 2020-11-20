@@ -170,31 +170,56 @@ def execute_process(options):
     """.format(LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
     similarity_nome_rg.createOrReplaceTempView("SIMILARITY_NOME_RG")
 
+    T0 = spark.sql("""
+        SELECT pesf_pess_dk as pess_dk, pesf_pess_dk as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        UNION ALL
+        SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_cpf) as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        WHERE pesf_cpf IS NOT NULL 
+        AND pesf_cpf NOT IN ('00000000000', '') -- valores invalidos de CPF
+        UNION ALL
+        SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_nr_rg, pesf_dt_nasc) as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        WHERE pesf_dt_nasc IS NOT NULL
+        AND length(pesf_nr_rg) = 9 AND pesf_nr_rg != '000000000'
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_DTNASC
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_NOMEMAE
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_RG
+    """)
+    T0.createOrReplaceTempView("T0")
+    spark.catalog.cacheTable("T0")
+
     pessoas_fisicas_representativas_1 = spark.sql("""
+        WITH T1 AS (
+            SELECT DISTINCT A.representante_dk as r1, B.representante_dk as r2
+            FROM T0 A
+            JOIN T0 B ON A.pess_dk = B.pess_dk AND A.representante_dk != B.representante_dk
+        ),
+        T2 AS (
+            SELECT A.r2 as r1, B.r2 as r2
+            FROM T1 A
+            JOIN T1 B ON A.r1 = B.r1 AND A.r2 != B.r2
+            UNION ALL
+            SELECT *
+            FROM T1
+        ),
+        T3 AS (
+            SELECT A.r2 as pess_dk, B.r2 as representante_dk
+            FROM T2 A
+            JOIN T2 B ON A.r1 = B.r1 AND A.r2 != B.r2
+            UNION ALL
+            SELECT pess_dk, representante_dk
+            FROM T0
+        )
         SELECT t.pess_dk, min(t.representante_dk) as representante_dk
-        FROM (
-            SELECT pesf_pess_dk as pess_dk, pesf_pess_dk as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            UNION ALL
-            SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_cpf) as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            WHERE pesf_cpf IS NOT NULL 
-            AND pesf_cpf NOT IN ('00000000000', '') -- valores invalidos de CPF
-            UNION ALL
-            SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_nr_rg, pesf_dt_nasc) as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            WHERE pesf_dt_nasc IS NOT NULL
-            AND length(pesf_nr_rg) = 9 AND pesf_nr_rg != '000000000'
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_DTNASC
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_NOMEMAE
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_RG
-            ) t
+        FROM T3 t
         GROUP BY t.pess_dk
     """)
 
@@ -240,7 +265,7 @@ def execute_process(options):
     """.format(schema_exadata))
 
     table_name = options['table_name']
-    table_name = "{}.test_{}".format(schema_exadata_aux, table_name)
+    table_name = "{}.test2_{}".format(schema_exadata_aux, table_name)
     pessoas_representativas_2.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
     temp_table = spark.table("temp_table_pip_investigados_representantes")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
