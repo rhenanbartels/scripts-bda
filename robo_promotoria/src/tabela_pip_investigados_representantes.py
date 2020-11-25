@@ -196,30 +196,47 @@ def execute_process(options):
     T0.createOrReplaceTempView("T0")
     spark.catalog.cacheTable("T0")
 
+    # Pode haver "vácuos horizontais" entre os representantes de um grupo
+    # Esses JOINs estão aqui para evitar isso
+    # Fazer os JOINs 3 vezes garante que, para todos os casos, o problema é sanado (porém é custoso...)
+    # Ele é, então, feito uma única vez, que vai pegar a maioria dos casos.
+    T1 = spark.sql("""
+        SELECT DISTINCT A.representante_dk as r1, B.representante_dk as r2
+        FROM T0 A
+        JOIN T0 B ON A.pess_dk = B.pess_dk AND A.representante_dk != B.representante_dk
+    """)
+    T1.createOrReplaceTempView("T1")
+    #spark.catalog.cacheTable("T1")
+
+    T2 = spark.sql("""
+        -- SELECT A.r2 as r1, B.r2 as r2
+        -- FROM T1 A
+        -- JOIN T1 B ON A.r1 = B.r1 AND A.r2 != B.r2
+        -- UNION ALL
+        -- SELECT *
+        -- FROM T1
+        SELECT r1 as pess_dk, r2 as representante_dk
+        FROM T1
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM T0
+    """)
+    T2.createOrReplaceTempView("T2")
+    spark.catalog.cacheTable("T2")
+
+    # T3 = spark.sql("""
+    #     SELECT A.r2 as pess_dk, B.r2 as representante_dk
+    #     FROM T2 A
+    #     JOIN T2 B ON A.r1 = B.r1 AND A.r2 != B.r2
+    #     UNION ALL
+    #     SELECT pess_dk, representante_dk
+    #     FROM T0
+    # """)
+    # T3.createOrReplaceTempView("T3")
+
     pessoas_fisicas_representativas_1 = spark.sql("""
-        WITH T1 AS (
-            SELECT DISTINCT A.representante_dk as r1, B.representante_dk as r2
-            FROM T0 A
-            JOIN T0 B ON A.pess_dk = B.pess_dk AND A.representante_dk != B.representante_dk
-        ),
-        T2 AS (
-            SELECT A.r2 as r1, B.r2 as r2
-            FROM T1 A
-            JOIN T1 B ON A.r1 = B.r1 AND A.r2 != B.r2
-            UNION ALL
-            SELECT *
-            FROM T1
-        ),
-        T3 AS (
-            SELECT A.r2 as pess_dk, B.r2 as representante_dk
-            FROM T2 A
-            JOIN T2 B ON A.r1 = B.r1 AND A.r2 != B.r2
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM T0
-        )
         SELECT t.pess_dk, min(t.representante_dk) as representante_dk
-        FROM T3 t
+        FROM T2 t
         GROUP BY t.pess_dk
     """)
 
@@ -265,7 +282,7 @@ def execute_process(options):
     """.format(schema_exadata))
 
     table_name = options['table_name']
-    table_name = "{}.test2_{}".format(schema_exadata_aux, table_name)
+    table_name = "{}.{}".format(schema_exadata_aux, table_name)
     pessoas_representativas_2.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
     temp_table = spark.table("temp_table_pip_investigados_representantes")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)

@@ -111,11 +111,11 @@ def execute_process(options):
             row_number() OVER (PARTITION BY docu_nr_mp ORDER BY B.has_dk DESC, A.is_investigado DESC) as nr_pers
         FROM PERSONAGENS_SIMILARIDADE A
         LEFT JOIN (
-            SELECT pess_dk, R.representante_dk, 1 as has_dk FROM {1}.test_tb_pip_investigados_representantes R
+            SELECT pess_dk, R.representante_dk, 1 as has_dk FROM {1}.tb_pip_investigados_representantes R
             JOIN
             (
                 SELECT DISTINCT representante_dk
-                FROM {1}.test_tb_pip_investigados_representantes
+                FROM {1}.tb_pip_investigados_representantes
                 JOIN {0}.mcpr_personagem ON pess_dk = pers_pess_dk
                 WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
             ) RI ON RI.representante_dk = R.representante_dk
@@ -189,7 +189,7 @@ def execute_process(options):
         """
     )
 
-    table_name = "{}.test_{}".format(schema_exadata_aux, table_name)
+    table_name = "{}.{}".format(schema_exadata_aux, table_name)
 
     lista_investigacoes.write.mode("overwrite").saveAsTable("temp_table_lista_investigacoes")
     temp_table = spark.table("temp_table_lista_investigacoes")
