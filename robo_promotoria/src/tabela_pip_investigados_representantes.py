@@ -55,7 +55,7 @@ def execute_process(options):
     PERS_DOCS_PIPS = spark.sql("""
         SELECT DISTINCT pers_pess_dk
         FROM {0}.mcpr_personagem
-        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
+        --WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
     """.format(schema_exadata))
     PERS_DOCS_PIPS.createOrReplaceTempView('PERS_DOCS_PIPS')
     spark.catalog.cacheTable('PERS_DOCS_PIPS')
@@ -170,31 +170,73 @@ def execute_process(options):
     """.format(LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
     similarity_nome_rg.createOrReplaceTempView("SIMILARITY_NOME_RG")
 
+    T0 = spark.sql("""
+        SELECT pesf_pess_dk as pess_dk, pesf_pess_dk as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        UNION ALL
+        SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_cpf) as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        WHERE pesf_cpf IS NOT NULL 
+        AND pesf_cpf NOT IN ('00000000000', '') -- valores invalidos de CPF
+        UNION ALL
+        SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_nr_rg, pesf_dt_nasc) as representante_dk
+        FROM INVESTIGADOS_FISICOS_PIP_TOTAL
+        WHERE pesf_dt_nasc IS NOT NULL
+        AND length(pesf_nr_rg) = 9 AND pesf_nr_rg != '000000000'
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_DTNASC
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_NOMEMAE
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM SIMILARITY_NOME_RG
+    """)
+    T0.createOrReplaceTempView("T0")
+    spark.catalog.cacheTable("T0")
+
+    # Pode haver "vácuos horizontais" entre os representantes de um grupo
+    # Esses JOINs estão aqui para evitar isso
+    # Fazer os JOINs 3 vezes garante que, para todos os casos, o problema é sanado (porém é custoso...)
+    # Ele é, então, feito uma única vez, que vai pegar a maioria dos casos.
+    T1 = spark.sql("""
+        SELECT DISTINCT A.representante_dk as r1, B.representante_dk as r2
+        FROM T0 A
+        JOIN T0 B ON A.pess_dk = B.pess_dk AND A.representante_dk != B.representante_dk
+    """)
+    T1.createOrReplaceTempView("T1")
+    #spark.catalog.cacheTable("T1")
+
+    T2 = spark.sql("""
+        -- SELECT A.r2 as r1, B.r2 as r2
+        -- FROM T1 A
+        -- JOIN T1 B ON A.r1 = B.r1 AND A.r2 != B.r2
+        -- UNION ALL
+        -- SELECT *
+        -- FROM T1
+        SELECT r1 as pess_dk, r2 as representante_dk
+        FROM T1
+        UNION ALL
+        SELECT pess_dk, representante_dk
+        FROM T0
+    """)
+    T2.createOrReplaceTempView("T2")
+    spark.catalog.cacheTable("T2")
+
+    # T3 = spark.sql("""
+    #     SELECT A.r2 as pess_dk, B.r2 as representante_dk
+    #     FROM T2 A
+    #     JOIN T2 B ON A.r1 = B.r1 AND A.r2 != B.r2
+    #     UNION ALL
+    #     SELECT pess_dk, representante_dk
+    #     FROM T0
+    # """)
+    # T3.createOrReplaceTempView("T3")
+
     pessoas_fisicas_representativas_1 = spark.sql("""
         SELECT t.pess_dk, min(t.representante_dk) as representante_dk
-        FROM (
-            SELECT pesf_pess_dk as pess_dk, pesf_pess_dk as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            UNION ALL
-            SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_cpf) as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            WHERE pesf_cpf IS NOT NULL 
-            AND pesf_cpf NOT IN ('00000000000', '') -- valores invalidos de CPF
-            UNION ALL
-            SELECT pesf_pess_dk as pess_dk, MIN(pesf_pess_dk) OVER(PARTITION BY pesf_nr_rg, pesf_dt_nasc) as representante_dk
-            FROM INVESTIGADOS_FISICOS_PIP_TOTAL
-            WHERE pesf_dt_nasc IS NOT NULL
-            AND length(pesf_nr_rg) = 9 AND pesf_nr_rg != '000000000'
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_DTNASC
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_NOMEMAE
-            UNION ALL
-            SELECT pess_dk, representante_dk
-            FROM SIMILARITY_NOME_RG
-            ) t
+        FROM T2 t
         GROUP BY t.pess_dk
     """)
 
