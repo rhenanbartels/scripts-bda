@@ -30,23 +30,23 @@ def execute_process(options):
     schema_exadata_aux = options['schema_exadata_aux']
     schema_hbase = options['schema_hbase']
 
+    assunto_delito = spark.sql("""
+        SELECT H.id, CASE WHEN P.nome_delito IS NOT NULL THEN P.nome_delito ELSE H.hierarquia END AS assunto
+        FROM {0}.mmps_assunto_docto H
+        LEFT JOIN {0}.tb_penas_assuntos P ON P.id = H.id
+    """.format(schema_exadata_aux))
+    assunto_delito.createOrReplaceTempView('assunto_delito')
+
     # Pega os assuntos com dt_fim NULL ou maior que a data atual
     # Por isso a query foi destrinchada em 2 partes
     assuntos = spark.sql("""
-        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(hierarquia)) as assuntos
+        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(assunto)) as assuntos
         FROM {0}.mcpr_assunto_documento
-        JOIN {1}.mmps_assunto_docto ON id = asdo_assu_dk
+        JOIN assunto_delito ON id = asdo_assu_dk
         JOIN {0}.mcpr_documento ON asdo_docu_dk = docu_dk
         WHERE asdo_dt_fim IS NULL
         GROUP BY asdo_docu_dk
-        UNION ALL
-        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(hierarquia)) as assuntos
-        FROM {0}.mcpr_assunto_documento
-        JOIN {1}.mmps_assunto_docto ON id = asdo_assu_dk
-        JOIN {0}.mcpr_documento ON asdo_docu_dk = docu_dk
-        WHERE asdo_dt_fim > current_timestamp()
-        GROUP BY asdo_docu_dk
-    """.format(schema_exadata, schema_exadata_aux))
+    """.format(schema_exadata))
     assuntos.createOrReplaceTempView('assuntos')
 
     representantes_investigados = spark.sql("""
@@ -67,6 +67,7 @@ def execute_process(options):
             docu_orgi_orga_dk_responsavel as pip_codigo,
             docu_dk,
             docu_nr_mp,
+            docu_nr_externo,
             docu_dt_cadastro,
             docu_cldc_dk,
             docu_fsdc_dk,
@@ -79,7 +80,7 @@ def execute_process(options):
         JOIN representantes_investigados RI ON RI.representante_dk = R.representante_dk
         JOIN {0}.mcpr_documento ON docu_dk = pers_docu_dk
         WHERE docu_tpst_dk != 11
-        GROUP BY R.representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
+        GROUP BY R.representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_nr_externo, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
     """.format(schema_exadata, schema_exadata_aux))
     documentos_pips.createOrReplaceTempView('documentos_pips')
     spark.catalog.cacheTable('documentos_pips')
@@ -113,6 +114,7 @@ def execute_process(options):
             pip_codigo,
             D.docu_dk,
             D.docu_nr_mp,
+            D.docu_nr_externo,
             docu_dt_cadastro,
             cldc_ds_classe,
             O.orgi_nm_orgao,
