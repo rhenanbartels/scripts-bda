@@ -37,13 +37,10 @@ def execute_process(options):
     """.format(schema_exadata_aux))
     assunto_delito.createOrReplaceTempView('assunto_delito')
 
-    # Pega os assuntos com dt_fim NULL ou maior que a data atual
-    # Por isso a query foi destrinchada em 2 partes
     assuntos = spark.sql("""
         SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(assunto)) as assuntos
         FROM {0}.mcpr_assunto_documento
         JOIN assunto_delito ON id = asdo_assu_dk
-        JOIN {0}.mcpr_documento ON asdo_docu_dk = docu_dk
         WHERE asdo_dt_fim IS NULL
         GROUP BY asdo_docu_dk
     """.format(schema_exadata))
@@ -64,23 +61,14 @@ def execute_process(options):
             R.pess_dk,
             concat_ws(', ', collect_list(tppe_descricao)) as tppe_descricao,
             concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
-            docu_orgi_orga_dk_responsavel as pip_codigo,
-            docu_dk,
-            docu_nr_mp,
-            docu_nr_externo,
-            docu_dt_cadastro,
-            docu_cldc_dk,
-            docu_fsdc_dk,
-            docu_tx_etiqueta,
+            pers_docu_dk as docu_dk,
             MIN(CASE WHEN pers_dt_fim <= current_timestamp() THEN 'Data Fim Atingida' ELSE 'Ativo' END) AS status_personagem,
             concat_ws(', ', collect_list(pers_dk)) as pers_dk
         FROM {0}.mcpr_personagem
         JOIN {0}.mcpr_tp_personagem ON tppe_dk = pers_tppe_dk
         JOIN {1}.tb_pip_investigados_representantes R ON pers_pess_dk = R.pess_dk
         JOIN representantes_investigados RI ON RI.representante_dk = R.representante_dk
-        JOIN {0}.mcpr_documento ON docu_dk = pers_docu_dk
-        WHERE docu_tpst_dk != 11
-        GROUP BY R.representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_nr_externo, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
+        GROUP BY R.representante_dk, R.pess_dk, pers_docu_dk
     """.format(schema_exadata, schema_exadata_aux))
     documentos_pips.createOrReplaceTempView('documentos_pips')
     spark.catalog.cacheTable('documentos_pips')
@@ -111,30 +99,33 @@ def execute_process(options):
             coautores,
             tppe_descricao,
             tppe_dk,
-            pip_codigo,
+            docu_orgi_orga_dk_responsavel as pip_codigo,
             D.docu_dk,
-            D.docu_nr_mp,
-            D.docu_nr_externo,
-            docu_dt_cadastro,
+            DOCS.docu_nr_mp,
+            DOCS.docu_nr_externo,
+            DOCS.docu_dt_cadastro,
             cldc_ds_classe,
             O.orgi_nm_orgao,
-            docu_tx_etiqueta,
+            DOCS.docu_tx_etiqueta,
             assuntos,
             fsdc_ds_fase,
             pcao_dt_andamento as dt_ultimo_andamento,
             tppr_descricao as desc_ultimo_andamento,
             D.pess_dk,
-            status_personagem, pers_dk,
+            status_personagem,
+            pers_dk,
             cod_pct,
             cast(substring(cast(D.representante_dk as string), -1, 1) as int) as rep_last_digit
         FROM documentos_pips D
+        JOIN {0}.mcpr_documento DOCS ON DOCS.docu_dk = D.docu_dk
         LEFT JOIN tb_coautores CA ON CA.docu_dk = D.docu_dk AND CA.representante_dk = D.representante_dk
         LEFT JOIN (SELECT * FROM ultimos_andamentos WHERE nr_and = 1) UA ON UA.docu_dk = D.docu_dk
-        JOIN {0}.orgi_orgao O ON orgi_dk = pip_codigo
+        JOIN {0}.orgi_orgao O ON orgi_dk = docu_orgi_orga_dk_responsavel
         LEFT JOIN {0}.mcpr_classe_docto_mp ON cldc_dk = docu_cldc_dk
         LEFT JOIN assuntos TASSU ON asdo_docu_dk = D.docu_dk
         LEFT JOIN {0}.mcpr_fases_documento ON docu_fsdc_dk = fsdc_dk
-        LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = pip_codigo
+        LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = docu_orgi_orga_dk_responsavel
+        WHERE docu_tpst_dk != 11
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name_procedimentos = options['table_name_procedimentos']
