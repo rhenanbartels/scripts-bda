@@ -42,11 +42,6 @@ def execute_process(options):
 
     dt_inicio = datetime.now() - timedelta(nb_past_days)
 
-    REGEX_EXCLUSAO_ORGAOS = (
-        "(^MP$|MINIST[EÉ]RIO P[UÚ]BLICO|DEFENSORIA P[UÚ]BLICA"
-        "|MINSTERIO PUBLICO|MPRJ|MINITÉRIO PÚBLICO|JUSTI[ÇC]A P[UÚ]BLICA)"
-    )
-
     spark.sql(
         """
         SELECT
@@ -77,53 +72,39 @@ def execute_process(options):
 
     spark.sql(
         """
-            WITH PERSONAGENS AS (SELECT
+        WITH PERSONAGENS AS (
+            SELECT
                 docu_nr_mp,
                 pess_dk,
-                CASE WHEN concat_ws(', ', collect_list(cast(tppe_dk as int))) REGEXP '(^| )(290|7|21|317|20|14|32|345|40|5|24)(,|$)' THEN 1 ELSE 0 END AS is_investigado,
                 pess_nm_pessoa,
                 LEAD(pess_nm_pessoa) OVER (PARTITION BY docu_nr_mp ORDER BY pess_nm_pessoa) proximo_nome
             FROM DOCU_TOTAIS
             JOIN {0}.mcpr_personagem ON pers_docu_dk = docu_dk
             JOIN {0}.mcpr_pessoa ON pers_pess_dk = pess_dk
             JOIN {0}.mcpr_tp_personagem ON pers_tppe_dk = tppe_dk
-            AND (
-                tppe_dk <> 7 OR
-                pess_nm_pessoa not rlike '{REGEX_EXCLUSAO_ORGAOS}'
-            )
+            WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
             GROUP BY docu_nr_mp, pess_nm_pessoa, pess_dk -- remove duplicação de personagens com mesmo
         ),
         PERSONAGENS_SIMILARIDADE AS (
-        SELECT docu_nr_mp,
-        pess_dk,
-        pess_nm_pessoa,
-        is_investigado,
-            CASE
-                WHEN name_similarity(pess_nm_pessoa, proximo_nome) > {LIMIAR_SIMILARIDADE} THEN false
-                ELSE true
-            END AS primeira_aparicao
+            SELECT docu_nr_mp,
+            pess_dk,
+            pess_nm_pessoa,
+                CASE
+                    WHEN name_similarity(pess_nm_pessoa, proximo_nome) > {LIMIAR_SIMILARIDADE} THEN false
+                    ELSE true
+                END AS primeira_aparicao
             FROM PERSONAGENS
         )
         SELECT
             docu_nr_mp,
             pess_nm_pessoa,
             B.representante_dk,
-            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY B.has_dk DESC, A.is_investigado DESC) as nr_pers
+            row_number() OVER (PARTITION BY docu_nr_mp ORDER BY A.pess_dk DESC) as nr_pers
         FROM PERSONAGENS_SIMILARIDADE A
-        LEFT JOIN (
-            SELECT pess_dk, R.representante_dk, 1 as has_dk FROM {1}.tb_pip_investigados_representantes R
-            JOIN
-            (
-                SELECT DISTINCT representante_dk
-                FROM {1}.tb_pip_investigados_representantes
-                JOIN {0}.mcpr_personagem ON pess_dk = pers_pess_dk
-                WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
-            ) RI ON RI.representante_dk = R.representante_dk
-        ) B ON A.pess_dk = B.pess_dk
+        JOIN {1}.tb_pip_investigados_representantes B ON A.pess_dk = B.pess_dk
         WHERE primeira_aparicao = true
         """.format(
             schema_exadata, schema_exadata_aux,
-            REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS,
             LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE
         )
     ).createOrReplaceTempView("PERSONAGENS_SIMILARIDADE")
@@ -191,7 +172,7 @@ def execute_process(options):
         JOIN DTS_ULTIMOS_ANDAMENTOS ULT
             ON A.DOCU_NR_MP = ULT.DOCU_NR_MP
             AND A.PCAO_DT_ANDAMENTO = ULT.DT_ULTIMO
-        JOIN DOCU_PERSONAGENS P ON P.DOCU_NR_MP = A.DOCU_NR_MP
+        LEFT JOIN DOCU_PERSONAGENS P ON P.DOCU_NR_MP = A.DOCU_NR_MP
         GROUP BY A.orgao_dk, A.classe_documento, A.docu_nr_mp,
             A.docu_nr_externo, A.docu_tx_etiqueta, P.personagens, P.representante_dk,
             A.pcao_dt_andamento
