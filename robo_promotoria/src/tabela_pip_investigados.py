@@ -30,49 +30,48 @@ def execute_process(options):
     schema_exadata_aux = options['schema_exadata_aux']
     schema_hbase = options['schema_hbase']
 
-    # Pega os assuntos com dt_fim NULL ou maior que a data atual
-    # Alem disso, do codigo do orgao atual ou antigo
-    # Por isso a query foi destrinchada em 4 partes
+    assunto_delito = spark.sql("""
+        SELECT H.id, CASE WHEN P.nome_delito IS NOT NULL THEN P.nome_delito ELSE H.hierarquia END AS assunto
+        FROM {0}.mmps_assunto_docto H
+        LEFT JOIN {0}.tb_penas_assuntos P ON P.id = H.id
+    """.format(schema_exadata_aux))
+    assunto_delito.createOrReplaceTempView('assunto_delito')
+
     assuntos = spark.sql("""
-        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(hierarquia)) as assuntos
+        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(assunto)) as assuntos
         FROM {0}.mcpr_assunto_documento
-        JOIN {1}.mmps_assunto_docto ON id = asdo_assu_dk
-        JOIN {0}.mcpr_documento ON asdo_docu_dk = docu_dk
+        JOIN assunto_delito ON id = asdo_assu_dk
         WHERE asdo_dt_fim IS NULL
         GROUP BY asdo_docu_dk
-        UNION ALL
-        SELECT asdo_docu_dk, concat_ws(' --- ', collect_list(hierarquia)) as assuntos
-        FROM {0}.mcpr_assunto_documento
-        JOIN {1}.mmps_assunto_docto ON id = asdo_assu_dk
-        JOIN {0}.mcpr_documento ON asdo_docu_dk = docu_dk
-        WHERE asdo_dt_fim > current_timestamp()
-        GROUP BY asdo_docu_dk
-    """.format(schema_exadata, schema_exadata_aux))
+    """.format(schema_exadata))
     assuntos.createOrReplaceTempView('assuntos')
+
+    representantes_investigados = spark.sql("""
+        SELECT DISTINCT representante_dk
+        FROM {1}.tb_pip_investigados_representantes
+        JOIN {0}.mcpr_personagem ON pess_dk = pers_pess_dk
+        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
+    """.format(schema_exadata, schema_exadata_aux)
+    )
+    representantes_investigados.createOrReplaceTempView('representantes_investigados')
 
     documentos_pips = spark.sql("""
         SELECT 
-            representante_dk,
+            R.representante_dk,
             R.pess_dk,
             concat_ws(', ', collect_list(tppe_descricao)) as tppe_descricao,
-            docu_orgi_orga_dk_responsavel as pip_codigo,
-            docu_dk,
-            docu_nr_mp,
-            docu_dt_cadastro,
-            docu_cldc_dk,
-            docu_fsdc_dk,
-            docu_tx_etiqueta,
+            concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
+            pers_docu_dk as docu_dk,
             MIN(CASE WHEN pers_dt_fim <= current_timestamp() THEN 'Data Fim Atingida' ELSE 'Ativo' END) AS status_personagem,
             concat_ws(', ', collect_list(pers_dk)) as pers_dk
         FROM {0}.mcpr_personagem
         JOIN {0}.mcpr_tp_personagem ON tppe_dk = pers_tppe_dk
         JOIN {1}.tb_pip_investigados_representantes R ON pers_pess_dk = R.pess_dk
-        JOIN {0}.mcpr_documento ON docu_dk = pers_docu_dk
-        WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
-        AND docu_tpst_dk != 11
-        GROUP BY representante_dk, R.pess_dk, docu_orgi_orga_dk_responsavel, docu_dk, docu_nr_mp, docu_dt_cadastro, docu_cldc_dk, docu_fsdc_dk, docu_tx_etiqueta
+        JOIN representantes_investigados RI ON RI.representante_dk = R.representante_dk
+        GROUP BY R.representante_dk, R.pess_dk, pers_docu_dk
     """.format(schema_exadata, schema_exadata_aux))
     documentos_pips.createOrReplaceTempView('documentos_pips')
+    spark.catalog.cacheTable('documentos_pips')
 
     documentos_investigados = spark.sql("""
         WITH docs_representantes AS (
@@ -99,29 +98,34 @@ def execute_process(options):
             D.representante_dk,
             coautores,
             tppe_descricao,
-            pip_codigo,
+            tppe_dk,
+            docu_orgi_orga_dk_responsavel as pip_codigo,
             D.docu_dk,
-            D.docu_nr_mp,
-            docu_dt_cadastro,
+            DOCS.docu_nr_mp,
+            DOCS.docu_nr_externo,
+            DOCS.docu_dt_cadastro,
             cldc_ds_classe,
             O.orgi_nm_orgao,
-            docu_tx_etiqueta,
+            DOCS.docu_tx_etiqueta,
             assuntos,
             fsdc_ds_fase,
             pcao_dt_andamento as dt_ultimo_andamento,
             tppr_descricao as desc_ultimo_andamento,
             D.pess_dk,
-            status_personagem, pers_dk,
+            status_personagem,
+            pers_dk,
             cod_pct,
             cast(substring(cast(D.representante_dk as string), -1, 1) as int) as rep_last_digit
         FROM documentos_pips D
+        JOIN {0}.mcpr_documento DOCS ON DOCS.docu_dk = D.docu_dk
         LEFT JOIN tb_coautores CA ON CA.docu_dk = D.docu_dk AND CA.representante_dk = D.representante_dk
         LEFT JOIN (SELECT * FROM ultimos_andamentos WHERE nr_and = 1) UA ON UA.docu_dk = D.docu_dk
-        JOIN {0}.orgi_orgao O ON orgi_dk = pip_codigo
+        JOIN {0}.orgi_orgao O ON orgi_dk = docu_orgi_orga_dk_responsavel
         LEFT JOIN {0}.mcpr_classe_docto_mp ON cldc_dk = docu_cldc_dk
         LEFT JOIN assuntos TASSU ON asdo_docu_dk = D.docu_dk
         LEFT JOIN {0}.mcpr_fases_documento ON docu_fsdc_dk = fsdc_dk
-        LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = pip_codigo
+        LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = docu_orgi_orga_dk_responsavel
+        WHERE docu_tpst_dk != 11
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name_procedimentos = options['table_name_procedimentos']
@@ -131,16 +135,23 @@ def execute_process(options):
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_procedimentos")
 
+    spark.catalog.clearCache()
+
     execute_compute_stats(table_name)
 
     # Contagem só será utilizada pela PIP e para PIPs, pelo menos por enquanto
     table = spark.sql("""
-        WITH DISTINCT_DOCS_COUNT AS (
-            SELECT representante_dk, COUNT(DISTINCT docu_dk) as nr_investigacoes, MAX(docu_dt_cadastro) as max_docu_date
+        WITH DOCS_INVESTIGADOS_FILTERED AS (
+            SELECT representante_dk, pess_dk, docu_dk, docu_dt_cadastro, pip_codigo, fsdc_ds_fase
             FROM {1}.tb_pip_investigados_procedimentos
-            JOIN {0}.mcpr_pessoa P ON P.pess_dk = representante_dk
-            WHERE P.pess_nm_pessoa NOT REGEXP 'IDENTIFICADO|IGNORAD[OA]|P[UÚ]BLICO|JUSTI[CÇ]A P[UÚ]BLICA|APURA[CÇ][AÃ]O'
+            WHERE tppe_dk REGEXP '(^| )(290|7|21|317|20|14|32|345|40|5|24)(,|$)' -- apenas os investigados na contagem
             AND cod_pct IN (200, 201, 202, 203, 204, 205, 206, 207, 208, 209)
+        ),
+        DISTINCT_DOCS_COUNT AS (
+            SELECT representante_dk, COUNT(DISTINCT docu_dk) as nr_investigacoes, MAX(docu_dt_cadastro) as max_docu_date
+            FROM DOCS_INVESTIGADOS_FILTERED
+            JOIN {0}.mcpr_pessoa P ON P.pess_dk = representante_dk
+            WHERE P.pess_nm_pessoa NOT REGEXP 'IDENTIFICADO|IGNORAD[OA]|APURA[CÇ][AÃ]O'
             GROUP BY representante_dk
         )
         SELECT 
@@ -154,14 +165,14 @@ def execute_process(options):
             FROM DISTINCT_DOCS_COUNT c
             JOIN (
                 SELECT representante_dk, pip_codigo
-                FROM {1}.tb_pip_investigados_procedimentos
+                FROM DOCS_INVESTIGADOS_FILTERED
                 GROUP BY representante_dk, pip_codigo
                 HAVING SUM(CASE WHEN fsdc_ds_fase = "Em Andamento" THEN 1 ELSE 0 END) > 0
             ) r
                 ON c.representante_dk = r.representante_dk) t
         LEFT JOIN (
             SELECT representante_dk, True as flag_multipromotoria
-            FROM {1}.tb_pip_investigados_procedimentos
+            FROM DOCS_INVESTIGADOS_FILTERED
             GROUP BY representante_dk
             HAVING COUNT(DISTINCT pip_codigo) > 1
         ) MULTI ON MULTI.representante_dk = t.representante_dk

@@ -20,6 +20,36 @@ params = {
             "pk_table_jdbc": "objectid",
             "update_date_table_jdbc": "",
             "table_hive": "seg_pub_in_pol_ocorrencia"
+        },
+        {
+            "table_jdbc": "plataforma.amb_saneamento_snis_info_indic_agua",
+            "pk_table_jdbc": "objectid",
+            "update_date_table_jdbc": "",
+            "table_hive": "plataforma_amb_saneamento_snis_info_indic_agua"
+        },
+        {
+            "table_jdbc": "plataforma.amb_saneamento_snis_info_indic_drenagem",
+            "pk_table_jdbc": "objectid",
+            "update_date_table_jdbc": "",
+            "table_hive": "plataforma_amb_saneamento_snis_info_indic_drenagem"
+        },
+        {
+            "table_jdbc": "plataforma.amb_saneamento_snis_info_indic_esgoto",
+            "pk_table_jdbc": "objectid",
+            "update_date_table_jdbc": "",
+            "table_hive": "plataforma_amb_saneamento_snis_info_indic_esgoto"
+        },
+        {
+            "table_jdbc": "institucional.orgaos_meio_ambiente",
+            "pk_table_jdbc": "id",
+            "update_data_table_jdbc": "",
+            "table_hive": "institucional_orgaos_meio_ambiente"
+        },
+        {
+            "table_jdbc": "meio_ambiente.amb_saneamento_snis_drenagem_info_indic_2018",
+            "pk_table_jdbc": "cod_mun",
+            "update_data_table_jdbc": "",
+            "table_hive": "meio_ambiente_amb_saneamento_snis_drenagem_info_indic_2018"
         }
     ]
 }
