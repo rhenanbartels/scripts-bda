@@ -36,6 +36,7 @@ def execute_process(options):
             .getOrCreate()
 
     spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
+    spark.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
 
     spark.udf.register("name_similarity", name_similarity)
     spark.udf.register("clean_name", clean_name)
@@ -53,12 +54,12 @@ def execute_process(options):
     )
 
     PERS_DOCS_PIPS = spark.sql("""
-        SELECT DISTINCT pers_pess_dk
+        SELECT DISTINCT cast(pers_pess_dk as int) as pers_pess_dk
         FROM {0}.mcpr_personagem
         --WHERE pers_tppe_dk IN (290, 7, 21, 317, 20, 14, 32, 345, 40, 5, 24)
     """.format(schema_exadata))
     PERS_DOCS_PIPS.createOrReplaceTempView('PERS_DOCS_PIPS')
-    spark.catalog.cacheTable('PERS_DOCS_PIPS')
+    #spark.catalog.cacheTable('PERS_DOCS_PIPS')
 
 
     investigados_fisicos_pip_total = spark.sql("""
@@ -88,6 +89,7 @@ def execute_process(options):
         AND NOT name_similarity(substring(clean_name(pesj_nm_pessoa_juridica), 1, 17), 'MINISTERIOPUBLICO') > {LIMIAR_SIMILARIDADE}
     """.format(schema_exadata, REGEX_EXCLUSAO_ORGAOS=REGEX_EXCLUSAO_ORGAOS, LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
     investigados_juridicos_pip_total.createOrReplaceTempView("INVESTIGADOS_JURIDICOS_PIP_TOTAL")
+    spark.catalog.cacheTable('INVESTIGADOS_JURIDICOS_PIP_TOTAL')
 
     # PARTITION BY substring(pesf_nm_pessoa_fisica, 1, 1)
     similarity_nome_dtnasc = spark.sql("""
@@ -206,7 +208,6 @@ def execute_process(options):
         JOIN T0 B ON A.pess_dk = B.pess_dk AND A.representante_dk != B.representante_dk
     """)
     T1.createOrReplaceTempView("T1")
-    #spark.catalog.cacheTable("T1")
 
     T2 = spark.sql("""
         -- SELECT A.r2 as r1, B.r2 as r2
@@ -273,24 +274,39 @@ def execute_process(options):
         pesf_nr_rg as pess_pesf_nr_rg,
         pesf_dt_nasc as pess_pesf_dt_nasc,
         pesj_nm_pessoa_juridica as pess_pesj_nm_pessoa_juridica,
-        pesj_cnpj as pess_pesj_cnpj,
-        cast(substring(cast(B.representante_dk as string), -1, 1) as int) as rep_last_digit
+        pesj_cnpj as pess_pesj_cnpj
         FROM REPR_1 A
         JOIN REPR_1 B ON A.representante_dk = B.pess_dk
         LEFT JOIN {0}.mcpr_pessoa_fisica ON A.pess_dk = pesf_pess_dk
         LEFT JOIN {0}.mcpr_pessoa_juridica ON A.pess_dk = pesj_pess_dk
     """.format(schema_exadata))
+    pessoas_representativas_2.createOrReplaceTempView('T_FINAL')
+
+    resultado = spark.sql("""
+        SELECT
+            pers_pess_dk as pess_dk,
+            COALESCE(representante_dk, pers_pess_dk) as representante_dk,
+            pess_pesf_nm_pessoa_fisica,
+            pess_pesf_nm_mae,
+            pess_pesf_cpf,
+            pess_pesf_nr_rg,
+            pess_pesf_dt_nasc,
+            CASE WHEN representante_dk IS NOT NULL THEN pess_pesj_nm_pessoa_juridica ELSE pess_nm_pessoa END as pess_pesj_nm_pessoa_juridica,
+            pess_pesj_cnpj,
+            cast(substring(cast(COALESCE(representante_dk, pers_pess_dk) as string), -1, 1) as int) as rep_last_digit
+        FROM (SELECT pers_pess_dk, pess_nm_pessoa FROM PERS_DOCS_PIPS JOIN {0}.mcpr_pessoa B ON B.pess_dk = pers_pess_dk) T
+        LEFT JOIN T_FINAL F ON pers_pess_dk = pess_dk
+        """.format(schema_exadata))
 
     table_name = options['table_name']
-    table_name = "{}.{}".format(schema_exadata_aux, table_name)
-    pessoas_representativas_2.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
+    table_name = "{}.test_{}".format(schema_exadata_aux, table_name)
+    resultado.repartition('rep_last_digit').write.mode("overwrite").saveAsTable("temp_table_pip_investigados_representantes")
+    spark.catalog.clearCache()
     temp_table = spark.table("temp_table_pip_investigados_representantes")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_representantes")
 
     execute_compute_stats(table_name)
-
-    spark.catalog.clearCache()
 
 
 if __name__ == "__main__":
