@@ -9,7 +9,7 @@ def execute_process(options):
 
     spark = pyspark.sql.session.SparkSession \
             .builder \
-            .appName("criar_tabela_acervo") \
+            .appName("criar_tabela_documentos_arquivados") \
             .config("spark.sql.sources.partitionOverwriteMode", "dynamic") \
             .enableHiveSupport() \
             .getOrCreate()
