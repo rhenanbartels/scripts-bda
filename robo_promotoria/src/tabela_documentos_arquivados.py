@@ -63,6 +63,7 @@ def execute_process(options):
        WHERE NOT (item_docu_dk IS NULL AND vist_docu_dk IS NULL)
         AND docu_fsdc_dk = 1
         AND docu_tpst_dk != 11
+        AND docu_orgi_orga_dk_responsavel IS NOT NULL
     """.format(schema_exadata, schema_exadata_aux))
 
     table_name = "{}.{}".format(schema_exadata_aux, table_name)
