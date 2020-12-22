@@ -20,7 +20,7 @@ def execute_process(options):
 
     table = spark.sql("""
         SELECT DISTINCT D.docu_dk, D.docu_orgi_orga_dk_responsavel
-        FROM documento D
+        FROM {0}.mcpr_documento D
         LEFT JOIN (
             SELECT item_docu_dk
             FROM {0}.mcpr_item_movimentacao
@@ -53,9 +53,9 @@ def execute_process(options):
                     THEN 1
                 ELSE null
                 END AS is_arquivamento
-            FROM documento
+            FROM {0}.mcpr_documento
             LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = docu_orgi_orga_dk_responsavel
-            JOIN vista ON vist_docu_dk = docu_dk
+            JOIN {0}.mcpr_vista ON vist_docu_dk = docu_dk
             JOIN {0}.mcpr_andamento ON vist_dk = pcao_vist_dk
             JOIN {0}.mcpr_sub_andamento ON stao_pcao_dk = pcao_dk
             JOIN {0}.mcpr_tp_andamento ON tppr_dk = stao_tppr_dk
