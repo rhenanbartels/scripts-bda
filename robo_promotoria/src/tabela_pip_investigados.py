@@ -60,10 +60,10 @@ def execute_process(options):
             R.representante_dk,
             R.pess_dk,
             concat_ws(', ', collect_list(tppe_descricao)) as tppe_descricao,
-            concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
-            pers_docu_dk as docu_dk,
-            MIN(CASE WHEN pers_dt_fim <= current_timestamp() THEN 'Data Fim Atingida' ELSE 'Ativo' END) AS status_personagem,
-            concat_ws(', ', collect_list(pers_dk)) as pers_dk
+            --concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
+            pers_docu_dk as docu_dk
+            --MIN(CASE WHEN pers_dt_fim <= current_timestamp() THEN 'Data Fim Atingida' ELSE 'Ativo' END) AS status_personagem,
+            --concat_ws(', ', collect_list(pers_dk)) as pers_dk
         FROM {0}.mcpr_personagem
         JOIN {0}.mcpr_tp_personagem ON tppe_dk = pers_tppe_dk
         JOIN {1}.tb_pip_investigados_representantes R ON pers_pess_dk = R.pess_dk
@@ -73,12 +73,15 @@ def execute_process(options):
     documentos_pips.createOrReplaceTempView('documentos_pips')
     spark.catalog.cacheTable('documentos_pips')
 
+    docs_representantes = spark.sql("""
+        SELECT DISTINCT docu_dk, representante_dk
+        FROM documentos_pips
+    """)
+    docs_representantes.createOrReplaceTempView('docs_representantes')
+    spark.catalog.cacheTable('docs_representantes')
+
     documentos_investigados = spark.sql("""
-        WITH docs_representantes AS (
-            SELECT DISTINCT docu_dk, representante_dk
-            FROM documentos_pips
-        ),
-        tb_coautores AS (
+        WITH tb_coautores AS (
             SELECT A.docu_dk, A.representante_dk,
                 concat_ws(', ', collect_list(C.pess_nm_pessoa)) as coautores
             FROM docs_representantes A
@@ -89,31 +92,31 @@ def execute_process(options):
         ultimos_andamentos AS (
             SELECT docu_dk, pcao_dt_andamento, tppr_descricao, row_number() over (partition by docu_dk order by pcao_dt_andamento desc) as nr_and
             FROM (SELECT DISTINCT docu_dk FROM documentos_pips) p
-            LEFT JOIN {0}.mcpr_vista ON vist_docu_dk = docu_dk
-            LEFT JOIN {0}.mcpr_andamento ON pcao_vist_dk = vist_dk
-            LEFT JOIN {0}.mcpr_sub_andamento ON stao_pcao_dk = pcao_dk
-            LEFT JOIN {0}.mcpr_tp_andamento ON stao_tppr_dk = tppr_dk
+            JOIN {0}.mcpr_vista ON vist_docu_dk = docu_dk
+            JOIN {0}.mcpr_andamento ON pcao_vist_dk = vist_dk
+            JOIN {0}.mcpr_sub_andamento ON stao_pcao_dk = pcao_dk
+            JOIN {0}.mcpr_tp_andamento ON stao_tppr_dk = tppr_dk
         )
         SELECT 
             D.representante_dk,
             coautores,
-            tppe_descricao,
-            tppe_dk,
+            tppe_descricao, 
+            --tppe_dk,
             docu_orgi_orga_dk_responsavel as pip_codigo,
             D.docu_dk,
             DOCS.docu_nr_mp,
             DOCS.docu_nr_externo,
             DOCS.docu_dt_cadastro,
-            cldc_ds_classe,
+            --cldc_ds_classe,
             O.orgi_nm_orgao,
-            DOCS.docu_tx_etiqueta,
+            --DOCS.docu_tx_etiqueta,
             assuntos,
             fsdc_ds_fase,
             pcao_dt_andamento as dt_ultimo_andamento,
             tppr_descricao as desc_ultimo_andamento,
             D.pess_dk,
-            status_personagem,
-            pers_dk,
+            --status_personagem,
+            --pers_dk,
             cod_pct,
             cast(substring(cast(D.representante_dk as string), -1, 1) as int) as rep_last_digit
         FROM documentos_pips D
@@ -121,7 +124,7 @@ def execute_process(options):
         LEFT JOIN tb_coautores CA ON CA.docu_dk = D.docu_dk AND CA.representante_dk = D.representante_dk
         LEFT JOIN (SELECT * FROM ultimos_andamentos WHERE nr_and = 1) UA ON UA.docu_dk = D.docu_dk
         JOIN {0}.orgi_orgao O ON orgi_dk = docu_orgi_orga_dk_responsavel
-        LEFT JOIN {0}.mcpr_classe_docto_mp ON cldc_dk = docu_cldc_dk
+        --LEFT JOIN {0}.mcpr_classe_docto_mp ON cldc_dk = docu_cldc_dk
         LEFT JOIN assuntos TASSU ON asdo_docu_dk = D.docu_dk
         LEFT JOIN {0}.mcpr_fases_documento ON docu_fsdc_dk = fsdc_dk
         LEFT JOIN {1}.atualizacao_pj_pacote ON id_orgao = docu_orgi_orga_dk_responsavel
@@ -131,11 +134,10 @@ def execute_process(options):
     table_name_procedimentos = options['table_name_procedimentos']
     table_name = "{}.{}".format(schema_exadata_aux, table_name_procedimentos)
     documentos_investigados.repartition("rep_last_digit").write.mode("overwrite").saveAsTable("temp_table_pip_investigados_procedimentos")
+    spark.catalog.clearCache()
     temp_table = spark.table("temp_table_pip_investigados_procedimentos")
     temp_table.repartition(15).write.mode("overwrite").partitionBy('rep_last_digit').saveAsTable(table_name)
     spark.sql("drop table temp_table_pip_investigados_procedimentos")
-
-    spark.catalog.clearCache()
 
     execute_compute_stats(table_name)
 
