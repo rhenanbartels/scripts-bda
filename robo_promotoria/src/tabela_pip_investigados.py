@@ -60,7 +60,7 @@ def execute_process(options):
             R.representante_dk,
             R.pess_dk,
             concat_ws(', ', collect_list(tppe_descricao)) as tppe_descricao,
-            --concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
+            concat_ws(', ', collect_list(cast(tppe_dk as int))) as tppe_dk,
             pers_docu_dk as docu_dk
             --MIN(CASE WHEN pers_dt_fim <= current_timestamp() THEN 'Data Fim Atingida' ELSE 'Ativo' END) AS status_personagem,
             --concat_ws(', ', collect_list(pers_dk)) as pers_dk
@@ -101,7 +101,7 @@ def execute_process(options):
             D.representante_dk,
             coautores,
             tppe_descricao, 
-            --tppe_dk,
+            tppe_dk,
             docu_orgi_orga_dk_responsavel as pip_codigo,
             D.docu_dk,
             DOCS.docu_nr_mp,
