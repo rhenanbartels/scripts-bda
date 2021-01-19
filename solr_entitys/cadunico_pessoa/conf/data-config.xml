@@ -1,0 +1,10 @@
+<dataConfig>
+    <dataSource driver="org.apache.hive.jdbc.HiveDriver" url="jdbc:hive2://192.168.8.6:10000/cadunico;principal=hive/bda1node06.pgj.rj.gov.br@BDA.LOCAL"
+	user="mpmapas"
+        password="U2FsdGVkX1/8BxblgEjLIQoO3kUjdqCEGnJd56kZlnw=" 
+        encryptKeyFile="/var/lib/solr/server/encryptionkey"/>
+    <document>
+        <entity name="cadunico_pessoa" query="select cd_ibge_cadastro, nu_cpf_pessoa, no_pessoa, no_completo_pai_pessoa, no_completo_mae_pessoa, dt_cadastramento_memb,dt_nasc_pessoa, dt_emissao_cart_trab_pessoa, dt_emissao_certidao, dt_emissao_ident_pessoa from cadunico_arq_pessoa">
+        </entity>
+    </document>
+</dataConfig>
