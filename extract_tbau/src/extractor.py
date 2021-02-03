@@ -58,7 +58,7 @@ def extract_tbau_movimento(spark):
 		# col("DOAA_DT_ALTERACAO").alias("DOAT_DT_ALTERACAO"),
 	]
     documento = spark.table("%s.mcpr_documento" % options["schema_exadata"]).\
-		filter("doc_dp_vara.DOCU_DT_CANCELAMENTO IS NULL")
+		filter("DOCU_DT_CANCELAMENTO IS NULL")
     sigilo = spark.table("%s.mcpr_nivel_sigilo" % options["schema_exadata"])
     # materia = spark.table("%s.mprj_materia_mgp" % options["schema_exadata"])
     tipo_doc = spark.table("%s.mcpr_tp_documento" % options["schema_exadata"])
@@ -105,12 +105,12 @@ def extract_tbau_movimento(spark):
 		col("ORLW_ORGI_IN_JUIZO_UNICO").alias("DOAT_JUIZO_UNICO_CG"),
 		col("ORLW_ORGI_DT_FIM").alias("DOAT_DT_FIM_CG"),
 	])
-    tp_local_resp = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"]).select([
+    tp_local_resp = spark.table("%s.orgi_tp_orgao" % options["schema_exadata"]).select([
 		col("TPOR_DK").alias("TP_LOC_RESP_DK"),
 		col("TPOR_DS_TP_ORGAO").alias("DOAT_ORGAO_TP_OR"),
 		col("TPOR_CLASSIFICACAO").alias("DOAT_ORGAO_A_E_OR"),
 	])
-    tp_local_carga = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"]).select([
+    tp_local_carga = spark.table("%s.orgi_tp_orgao" % options["schema_exadata"]).select([
 		col("TPOR_DK").alias("TP_LOC_CARGA_DK"),
 		col("TPOR_DS_TP_ORGAO").alias("DOAT_ORGAO_TP_CG"),
 		col("TPOR_CLASSIFICACAO").alias("DOAT_ORGAO_A_E_CG"),
@@ -144,6 +144,7 @@ def generate_tbau(spark, dataframe, table_name):
     table_df.coalesce(20).write.format('parquet').saveAsTable(table_name, mode='overwrite')
 
     execute_compute_stats(table_name)
+
 
 def execute_process(options):
 
