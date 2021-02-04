@@ -10,6 +10,12 @@ params = {
     "tables": [
         # Schema MCPR
         {
+            "table_jdbc": "MCPR.MCPR_DOCUMENTO_ALTERACAO",
+            "pk_table_jdbc": "DOAA_DOCU_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mcpr_documento_alteracao"
+        },
+        {
             "table_jdbc": "MCPR.MCPR_ACOMPANHAMENTO_DOCUMENTO",
             "pk_table_jdbc": "ACOM_DK",
             "update_date_table_jdbc": "",
@@ -1193,6 +1199,19 @@ params = {
             VIST_PCED_DK,VIST_PESF_PESS_DK_RESP_ANDAM,
             VIST_TMPL_DK_USADO
             """
+        },
+        # Schema MPRJ
+        {
+            "table_jdbc": "MPRJ.MPRJ_MATERIA_MGP",
+            "pk_table_jdbc": "MATE_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_materia_mgp"
+        },
+        {
+            "table_jdbc": "MPRJ.MPRJ_TP_ORGAO_EXT",
+            "pk_table_jdbc": "TPOE_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_tp_orgao_ext"
         },
         # Schema RH
         {
