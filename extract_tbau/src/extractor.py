@@ -139,6 +139,30 @@ def extract_tbau_documento(spark):
     return doc_dp_vara.select(columns)
 
 
+def extract_tbau_andamento(spark):
+	pass
+
+
+def extract_tbau_assunto(spark):
+	pass
+
+
+def extract_tbau_movimentacao(spark):
+	pass
+
+
+def extract_tbau_personagem(spark):
+	pass
+
+
+def extract_tbau_consumo(spark):
+	pass
+
+
+def extract_tbau_endereco(spark):
+	pass
+
+
 def generate_tbau(spark, generator, schema, table_name):
 	dataframe = generator(spark)
 	full_table_name = "{}.{}".format(schema, table_name)
@@ -164,6 +188,12 @@ def execute_process(options):
     schema_exadata_aux = options['schema_exadata_aux']
 	
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
+    # generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_andamento")
+    # generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_assunto")
+    # generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_movimentacao")
+    # generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_personagem")
+    # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_consumo")
+    # generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_endereco")
 
 
 if __name__ == "__main__":
