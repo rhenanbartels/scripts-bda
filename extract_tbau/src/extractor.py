@@ -183,28 +183,48 @@ def extract_tbau_endereco(spark):
 			lit(" "),
 			col("ENDC_NUMERO")
 		).alias("DODR_ENDERECO"),
-		# nvl(bai.bair_nm_bairro,ends.endc_nm_bairro) AS dodr_nm_bairro,
+		col("DODR_NM_BAIRRO"),
         col("ENDC_CEP").alias("DODR_CEP"),
-        # nvl(cid.cida_nm_cidade,ends.endc_nm_cidade) AS dodr_nm_cidade,
-        # nvl(puf.ufed_sigla,ends.endc_nm_estado) AS dodr_ufed
+        col("DODR_NM_CIDADE"),
+        col("DODR_UFED"),
 	]
 
 	doc_endereco = spark.table("%s.mcpr_endereco_documento" % options["schema_exadata"])
 	endereco = spark.table("%s.mcpr_enderecos" % options["schema_exadata"]).filter("ENDC_CIDA_DK IS NOT NULL")
-	# cidade = spark.table("%s.mprj_cidade" % options["schema_exadata"])
-	# estado = spark.table("%s.mprj_uf" % options["schema_exadata"])
-	# bairro = spark.table("%s.mprj_bairro" % options["schema_exadata"])
-	tipo_logradouro = spark.table("%s.mcpr_tp_logradouro" % options["schema_exadata"])
+	cidade = spark.table("%s.mprj_cidade" % options["schema_exadata"])
+	estado = spark.table("%s.mprj_uf" % options["schema_exadata"])
+	bairro = spark.table("%s.mprj_bairro" % options["schema_exadata"])
+	tipo_logradouro = spark.table("%s.mprj_tp_logradouro" % options["schema_exadata"])
 
 	end_documento = doc_endereco.join(endereco, doc_endereco.EDOC_ENDC_DK == endereco.ENDC_DK, "inner")
-	# end_cidade = end_documento.join(cidade, end_documento.ENDC_CIDA_DK == cidade.CIDA_DK, "left")
-	# end_estado = end_cidade.join(estado, end_cidade.CIDA_UFED_DK == estado.UFED_DK, "left")
-	# end_bairro = end_estado.join(bairro, [
-	# 	end_estado.ENDC_CIDA_DK == bairro.BAIR_CIDA_DK,
-	# 	end_estado.ENDC_BAIR_DK == bairro.BAIR_DK,
-	# ], "left")
-	# end_tp_logradouro = end_bairro.join(tipo_logradouro, end_bairro.ENDC_TPLO_DK == tipo_logradouro.TPLO_DK, "left")
-	end_tp_logradouro = end_documento.join(tipo_logradouro, end_documento.ENDC_TPLO_DK == tipo_logradouro.TPLO_DK, "left")
+	end_cidade = end_documento.join(cidade, end_documento.ENDC_CIDA_DK == cidade.CIDA_DK, "left")
+	end_estado = end_cidade.join(estado, end_cidade.CIDA_UFED_DK == estado.UFED_DK, "left")
+	end_bairro = end_estado.join(bairro, [
+		end_estado.ENDC_CIDA_DK == bairro.BAIR_CIDA_DK,
+	 	end_estado.ENDC_BAIR_DK == bairro.BAIR_DK,
+	], "left")
+	end_tp_logradouro = end_bairro.join(tipo_logradouro, end_bairro.ENDC_TPLO_DK == tipo_logradouro.TPLO_DK, "left").\
+		withColumn(
+            'DODR_NM_BAIRRO',
+            coalesce(
+                col('BAIR_NM_BAIRRO'),
+                col('ENDC_NM_BAIRRO')
+            )
+        ).\
+		withColumn(
+            'DODR_NM_CIDADE',
+            coalesce(
+                col('CIDA_NM_CIDADE'),
+                col('ENDC_NM_CIDADE')
+            )
+        ).\
+		withColumn(
+            'DODR_UFED',
+            coalesce(
+                col('UFED_SIGLA'),
+                col('ENDC_NM_ESTADO')
+            )
+        )
 
 	return end_tp_logradouro.select(columns).distinct()
 
