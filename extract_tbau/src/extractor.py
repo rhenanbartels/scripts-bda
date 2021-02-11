@@ -7,7 +7,7 @@ from pyspark.sql.functions import *
 
 from generic_utils import execute_compute_stats
 
-def extract_tbau_movimento(spark):
+def extract_tbau_documento(spark):
     columns = [
 		col("DOCU_DK").alias("DOAT_DOCU_DK"),
 		col("DOCU_NR_EXTERNO").alias("DOAT_DOCU_NR_EXTERNO"),
@@ -25,7 +25,7 @@ def extract_tbau_movimento(spark):
 		col("DOCU_IN_DOCUMENTO_ELETRONICO").alias("DOAT_DOCU_IN_DOC_ELETRONICO"),
 		col("DOCU_CLDC_DK").alias("DOAT_CLDC_DK"),
 		col("NISI_DS_NIVEL_SIGILO").alias("DOAT_NISI_DS_NIVEL_SIGILO"),
-		# col("MATE_DESCRICAO").alias("DOAT_MATE_ATRIBUICAO_DOC"),
+		col("MATE_DESCRICAO").alias("DOAT_MATE_ATRIBUICAO_DOC"),
 		col("TPDC_SIGLA").alias("DOAT_TPDC_SIGLA_DOC"),
 		col("TPDC_DESCRICAO").alias("DOAT_TPDC_DS_DOCUMENTO"),
 		col("DOAT_ORGAO_RESPONSAVEL"),
@@ -46,7 +46,7 @@ def extract_tbau_movimento(spark):
 		col("DOAT_JUIZO_UNICO_CG"),
 		col("DOAT_DT_FIM_CG"),
 		col("DOAT_NM_ORGAO_EXTERNO"),
-		# col("TPOE_DESCRICAO").alias("DOAT_TP_ORGAO_EXTERNO"),
+		col("TPOE_DESCRICAO").alias("DOAT_TP_ORGAO_EXTERNO"),
 		col("DOAT_NM_DELEF_FATO"),
 		col("DOAT_NM_DELEG_ORIGEM"),
 		col("DOAT_NM_VARA"),
@@ -55,14 +55,14 @@ def extract_tbau_movimento(spark):
 		col("cldc_cd_classe").alias("DOAT_CD_CLASSE"),
 		col("cldc_ds_classe").alias("DOAT_CLASSE"),
 		col("cldc_ds_hierarquia").alias("DOAT_CLASSE_HIERARQUIA"),
-		# col("DOAA_DT_ALTERACAO").alias("DOAT_DT_ALTERACAO"),
+		col("DOAA_DT_ALTERACAO").alias("DOAT_DT_ALTERACAO"),
 	]
     documento = spark.table("%s.mcpr_documento" % options["schema_exadata"]).\
 		filter("DOCU_DT_CANCELAMENTO IS NULL")
     sigilo = spark.table("%s.mcpr_nivel_sigilo" % options["schema_exadata"])
-    # materia = spark.table("%s.mprj_materia_mgp" % options["schema_exadata"])
+    materia = spark.table("%s.mprj_materia_mgp" % options["schema_exadata"])
     tipo_doc = spark.table("%s.mcpr_tp_documento" % options["schema_exadata"])
-    # alteracao = spark.table("%s.mcpr_documento_alteracao" % options["schema_exadata"])
+    alteracao = spark.table("%s.mcpr_documento_alteracao" % options["schema_exadata"])
     sit_doc = spark.table("%s.mcpr_tp_situacao_documento" % options["schema_exadata"])
     fase_doc = spark.table("%s.mcpr_fases_documento" % options["schema_exadata"])
     orgao_origem = spark.table("%s.mprj_orgao_ext" % options["schema_exadata"]).select([
@@ -82,7 +82,7 @@ def extract_tbau_movimento(spark):
 		col("ORGE_ORGA_DK").alias("ORG_EXT_VARA_DK"),
 		col("ORGE_NM_ORGAO").alias("DOAT_NM_VARA"),
 	])
-    # tp_orgao_ext = spark.table("%s.mprj_tp_orgao_ext" % options["schema_exadata"])
+    tp_orgao_ext = spark.table("%s.mprj_tp_orgao_ext" % options["schema_exadata"])
     classe_doc = spark.table("%s.mmps_classe_hierarquia" % options["schema_exadata_aux"])
     local_resp = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"]).select([
 		col("ORLW_DK").alias("LOC_RESP_DK"),
@@ -117,17 +117,17 @@ def extract_tbau_movimento(spark):
 	])
     
     doc_sigilo = documento.join(sigilo, documento.DOCU_NISI_DK == sigilo.NISI_DK, "left")
-    # doc_materia = doc_sigilo.join(materia, doc_sigilo.DOCU_MATE_DK == materia.MATE_DK, "left")
-    # doc_tipo = doc_materia.join(tipo_doc, doc_materia.DOCU_TPDC_DK == tipo_doc.TPDC_DK, "inner")
-    doc_tipo = doc_sigilo.join(tipo_doc, doc_sigilo.DOCU_TPDC_DK == tipo_doc.TPDC_DK, "inner")
-    # doc_alteracao = doc_tipo.join(alteracao, alteracao.DOAA_DOCU_DK == doc_tipo.DOCU_DK, "inner")
-    # doc_sit = doc_alteracao.join(sit_doc, doc_alteracao.DOCU_TPST_DK == sit_doc.TPST_DK, "left")
-    doc_sit = doc_tipo.join(sit_doc, doc_tipo.DOCU_TPST_DK == sit_doc.TPST_DK, "left")
+    doc_materia = doc_sigilo.join(materia, doc_sigilo.DOCU_MATE_DK == materia.MATE_DK, "left")
+    doc_tipo = doc_materia.join(tipo_doc, doc_materia.DOCU_TPDC_DK == tipo_doc.TPDC_DK, "inner")
+    # doc_tipo = doc_sigilo.join(tipo_doc, doc_sigilo.DOCU_TPDC_DK == tipo_doc.TPDC_DK, "inner")
+    doc_alteracao = doc_tipo.join(alteracao, alteracao.DOAA_DOCU_DK == doc_tipo.DOCU_DK, "inner")
+    doc_sit = doc_alteracao.join(sit_doc, doc_alteracao.DOCU_TPST_DK == sit_doc.TPST_DK, "left")
+    # doc_sit = doc_tipo.join(sit_doc, doc_tipo.DOCU_TPST_DK == sit_doc.TPST_DK, "left")
     doc_fase = doc_sit.join(fase_doc, doc_sit.DOCU_FSDC_DK == fase_doc.FSDC_DK, "left")
     doc_origem = doc_fase.join(orgao_origem, doc_fase.DOCU_ORGA_DK_ORIGEM == orgao_origem.ORG_EXT_ORIGEM_DK, "left")
-    # doc_tp_ext = doc_origem.join(tp_orgao_ext, doc_origem.ORG_EXT_TPOE_DK == tp_orgao_ext.TPOE_DK , "left")
-    # doc_classe = doc_tp_ext.join(classe_doc, doc_tp_ext.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
-    doc_classe = doc_origem.join(classe_doc, doc_origem.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
+    doc_tp_ext = doc_origem.join(tp_orgao_ext, doc_origem.ORG_EXT_TPOE_DK == tp_orgao_ext.TPOE_DK , "left")
+    doc_classe = doc_tp_ext.join(classe_doc, doc_tp_ext.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
+    # doc_classe = doc_origem.join(classe_doc, doc_origem.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
     doc_loc_resp = doc_classe.join(local_resp, doc_classe.DOCU_ORGI_ORGA_DK_RESPONSAVEL == local_resp.LOC_RESP_DK , "left")
     doc_tp_loc_resp = doc_loc_resp.join(tp_local_resp, doc_loc_resp.LOC_RESP_TPOR_DK == tp_local_resp.TP_LOC_RESP_DK , "left")
     doc_loc_carga = doc_tp_loc_resp.join(local_carga, doc_tp_loc_resp.DOCU_ORGI_ORGA_DK_CARGA == local_carga.LOC_CARGA_DK , "left")
@@ -139,31 +139,32 @@ def extract_tbau_movimento(spark):
     return doc_dp_vara.select(columns)
 
 
-def generate_tbau(spark, dataframe, table_name):
-    table_df = spark.createDataFrame(dataframe)
-    table_df.coalesce(20).write.format('parquet').saveAsTable(table_name, mode='overwrite')
-
-    execute_compute_stats(table_name)
+def generate_tbau(spark, generator, schema, table_name):
+	dataframe = generator(spark)
+	full_table_name = "{}.{}".format(schema, table_name)
+	
+	table_df = spark.createDataFrame(dataframe)
+	table_df.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
+	
+	execute_compute_stats(full_table_name)
+	print("{} gravada".format(table_name))
 
 
 def execute_process(options):
 
     spark = pyspark.sql.session.SparkSession\
         .builder\
-        .appName("tabelas_dominio")\
+        .appName("tabelas_tbau")\
         .enableHiveSupport()\
         .getOrCreate()
 
     sc = spark.sparkContext
 
-    schema_exadata = options['schema_exadata']
+    # schema_exadata = options['schema_exadata']
     schema_exadata_aux = options['schema_exadata_aux']
+	
+    generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
 
-    tbau_movimento = extract_tbau_movimento(spark)
-    table_name = "{}.tbau_movimento".format(schema_exadata_aux)
-    generate_tbau(spark, tbau_movimento, table_name)
-    print('movimentos gravados')
-    
 
 if __name__ == "__main__":
 
