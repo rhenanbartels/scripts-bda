@@ -322,7 +322,7 @@ def execute_process(options):
             cast(substring(cast(pers_pess_dk as string), -1, 1) as int) as rep_last_digit
         FROM (SELECT DISTINCT cast(pers_pess_dk as int) as pers_pess_dk FROM {0}.mcpr_personagem WHERE pers_pesf_dk IS NULL AND pers_pesj_dk IS NULL) T
         JOIN {0}.mcpr_pessoa B ON B.pess_dk = T.pers_pess_dk
-        WHERE remove_mp(pess_nm_pessoa) < {LIMIAR_SIMILARIDADE}
+        WHERE remove_mp(clean_name(pess_nm_pessoa)) < {LIMIAR_SIMILARIDADE}
         """.format(schema_exadata, LIMIAR_SIMILARIDADE=LIMIAR_SIMILARIDADE))
 
     table_name = options['table_name']
