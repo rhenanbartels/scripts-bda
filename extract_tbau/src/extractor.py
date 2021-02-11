@@ -144,8 +144,22 @@ def extract_tbau_andamento(spark):
 
 
 def extract_tbau_assunto(spark):
-	pass
+    columns = [
+		col("ASDO_DOCU_DK").alias("DASN_DOCU_DK"),
+		col("ASDO_DK").alias("DASN_DK"),
+		col("ASSU_TX_DISPOSITIVO_LEGAL").alias("DASN_TP_LEGAL"),
+		col("ASSU_NM_ASSUNTO").alias("DASN_NM_ASSUNTO"),
+		col("ASSU_CD_CNJ").alias("DASN_CD_CNJ"),
+		col("ASSU_CD_ASSUNTO").alias("DASN_CD_ASSUNTO"),
+		col("ASSU_DK").alias("DASN_ASSU_DK"),
+		col("ASSU_ASSU_DK").alias("DASN_ASSU_ASSU_DK_PAI"),
+	]
 
+    assunto_documento = spark.table("%s.mcpr_assunto_documento" % options["schema_exadata"])
+    assunto = spark.table("%s.mcpr_assunto" % options["schema_exadata"])
+    doc_assunto_join = assunto_documento.join(assunto, assunto_documento.ASDO_ASSU_DK == assunto.ASSU_DK, "inner")
+    
+    return doc_assunto_join.select(columns).distinct()
 
 def extract_tbau_movimentacao(spark):
 	pass
@@ -189,7 +203,7 @@ def execute_process(options):
 	
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
     # generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_andamento")
-    # generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_assunto")
+    generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_assunto")
     # generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_movimentacao")
     # generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_personagem")
     # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_consumo")
