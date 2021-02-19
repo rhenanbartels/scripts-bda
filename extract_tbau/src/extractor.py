@@ -140,7 +140,61 @@ def extract_tbau_documento(spark):
 
 
 def extract_tbau_andamento(spark):
-	pass
+	columns = [
+		col("VIST_DOCU_DK").alias("DOAN_DOCU_DK"),
+		col("VIST_DK").alias("DOAN_VIST_DK"),
+		col("VIST_DT_ABERTURA_VISTA").alias("DOAN_VIST_DT_ABERTURA_VISTA"),
+		col("VIST_ORGI_ORGA_DK").alias("DOAN_VIST_ORGI_DK"),
+		col("ORLW_ORGI_NM_ORGAO").alias("DOAN_ORGAO_VISTA"),
+		col("ORLW_REGI_NM_REGIAO").alias("DOAN_CRAAI_OV"),
+		col("ORLW_CMRC_NM_COMARCA").alias("DOAN_COMARCA_OV"),
+		col("ORLW_COFO_NM_FORO").alias("DOAN_FORO_OV"),
+		col("TPOR_DS_TP_ORGAO").alias("DOAN_ORGAO_TP_OV"),
+		col("TPOR_CLASSIFICACAO").alias("DOAN_ORGAO_A_E_OV"),
+		col("ORLW_ORGI_IN_JUIZO_UNICO").alias("DOAN_JUIZO_UNICO_OV"),
+		col("ORLW_ORGI_DT_INICIO").alias("DOAN_DT_INICIO_OV"),
+		col("ORLW_ORGI_DT_FIM").alias("DOAN_DT_FIM_OV"),
+		col("ORLW_ORGI_DET_CRIACAO").alias("DOAN_DET_CRIACAO_OV"),
+		col("PESS_NM_PESSOA").alias("DOAN_PESS_NM_RESPONSAVEL_ANDAM"),
+		col("PCAO_DK").alias("DOAN_PCAO_DK"),
+		col("PCAO_DT_ANDAMENTO").alias("DOAN_PCAO_DT_ANDAMENTO"),
+		col("STAO_DK").alias("DOAN_STAO_DK_SUB_ANDAMENTO"),
+		col("STAO_TPPR_DK").alias("DOAN_TPPR_DK_ANDAMENTO"),
+		col("TPPR_TPPR_DK").alias("DOAN_TPPR_TPPR_DK_PAI"),
+		col("STAO_IN_RELATADO").alias("DOAN_STAO_IN_RELATADO"),
+		col("TPPR_CD_TP_ANDAMENTO").alias("DOAN_TPPR_CD_TP_ANDAMENTO"),
+		col("TPPR_DESCRICAO").alias("DOAN_TPPR_DS_ANDAMENTO"),
+		col("HIERARQUIA").alias("DOAN_ANDAMENTO_HIERARQUIA"),
+		col("TEMPO_ANDAMENTO").alias("DOAN_TEMPO")
+	]
+	
+	vista = spark.table("%s.mcpr_vista" % options["schema_exadata"])
+	pessoa = spark.table("%s.mcpr_pessoa" % options["schema_exadata"])
+	vista_resp = vista.join(pessoa, vista.VIST_PESF_PESS_DK_RESP_ANDAM == pessoa.PESS_DK, "left")
+	andamento = spark.table("%s.mcpr_andamento" % options["schema_exadata"])
+	vista_andam = vista_resp.join(
+		andamento,
+		[
+			vista_resp.VIST_DK == andamento.PCAO_VIST_DK,
+			andamento.PCAO_TPSA_DK == 2
+		],
+		"left"
+	).withColumn(
+		'TEMPO_ANDAMENTO',
+		lit(datediff('PCAO_DT_ANDAMENTO', 'VIST_DT_ABERTURA_VISTA')).cast(IntegerType())
+	)
+	sub_andamento = spark.table("%s.mcpr_sub_andamento" % options["schema_exadata"])
+	vista_suba = vista_andam.join(sub_andamento, vista_andam.PCAO_DK == sub_andamento.STAO_PCAO_DK, "left")
+	tipo_andamento = spark.table("%s.mcpr_tp_andamento" % options["schema_exadata"])
+	vista_tpand = vista_suba.join(tipo_andamento, vista_suba.STAO_TPPR_DK == tipo_andamento.TPPR_DK, "left")
+	hier_andamento = spark.table("%s.mmps_tp_andamento" % options["schema_exadata_aux"])
+	vista_hrand = vista_tpand.join(hier_andamento, vista_tpand.TPPR_DK == hier_andamento.ID, "left")
+	orgao_local = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"])
+	vista_orgao = vista_hrand.join(orgao_local, vista_hrand.VIST_ORGI_ORGA_DK == orgao_local.ORLW_DK, "left")
+	tp_orgao = spark.table("%s.orgi_tp_orgao" % options["schema_exadata"])
+	vista_tp_orgao = vista_orgao.join(tp_orgao, vista_orgao.ORLW_ORGI_TPOR_DK == tp_orgao.TPOR_DK, "left")
+
+	return vista_tp_orgao.select(columns)
 
 
 def extract_tbau_assunto(spark):
@@ -399,7 +453,7 @@ def execute_process(options):
     schema_exadata_aux = options['schema_exadata_aux']
 	
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
-    # generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_documento_andamento")
+    generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_documento_andamento")
     generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_documento_assunto")
     generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
     generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
