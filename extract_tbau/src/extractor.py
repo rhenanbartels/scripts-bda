@@ -161,8 +161,42 @@ def extract_tbau_assunto(spark):
     
     return doc_assunto_join.select(columns).distinct()
 
+
 def extract_tbau_movimentacao(spark):
-	pass
+	columns = [
+		col("ITEM_DOCU_DK").alias("DOMO_DOCU_DK"),
+		col("ITEM_DK").alias("DOMO_ITEM_DK"),
+		col("MOVI_DK").alias("DOMO_MOVIDK"),
+		col("MOVI_ORGA_DK_ORIGEM").alias("DOMO_ORGA_ORIGEM_GUIA"),
+		col("ORIG_NM_PESSOA").alias("DOMO_ORGI_ORIGEM_GUIA"),
+		col("ORIG_IN_TP_PESSOA").alias("DOMO_TP_ORGI_ORIGEM"),
+		col("MOVI_ORGA_DK_DESTINO").alias("DOMO_ORGA_DESTINO_GUIA"),
+		col("DEST_NM_PESSOA").alias("DOMO_ORGI_DESTINO_GUIA"),
+		col("DEST_IN_TP_PESSOA").alias("DOMO_TP_ORGI_DESTINO"),
+		col("MOVI_DT_ENVIO_GUIA").alias("DOMO_MOVI_DT_ENVIO_GUIA"),
+		col("MOVI_DT_RECEBIMENTO_GUIA").alias("DOMO_MOVI_DT_RECEBIMENTO_GUIA"),
+		col("PCED_DS_PROCEDENCIA").alias("DOMO_DS_PROCEDENCIA_GUIA"),
+	]
+
+	movimentacao = spark.table("%s.mcpr_movimentacao" % options["schema_exadata"])
+	item = spark.table("%s.mcpr_item_movimentacao" % options["schema_exadata"])
+	movi_item = movimentacao.join(item, item.ITEM_MOVI_DK == movimentacao.MOVI_DK, "inner")
+	procedencia = spark.table("%s.mcpr_procedencia_documento" % options["schema_exadata"])
+	movi_proc = movi_item.join(procedencia, movi_item.MOVI_PCED_DK_PROCEDENCIA == procedencia.PCED_DK, "inner")
+	destino = spark.table("%s.mcpr_pessoa" % options["schema_exadata"]).select([
+		col("PESS_DK").alias("DEST_DK"),
+		col("PESS_NM_PESSOA").alias("DEST_NM_PESSOA"),
+		col("PESS_IN_TP_PESSOA").alias("DEST_IN_TP_PESSOA"),
+	])
+	movi_destino = movi_proc.join(destino, movi_proc.MOVI_ORGA_DK_DESTINO == destino.DEST_DK, "inner")
+	origem = spark.table("%s.mcpr_pessoa" % options["schema_exadata"]).select([
+		col("PESS_DK").alias("ORIG_DK"),
+		col("PESS_NM_PESSOA").alias("ORIG_NM_PESSOA"),
+		col("PESS_IN_TP_PESSOA").alias("ORIG_IN_TP_PESSOA"),
+	])
+	movi_origem = movi_destino.join(origem, movi_destino.MOVI_ORGA_DK_ORIGEM == origem.ORIG_DK, "inner")
+
+	return movi_origem.filter("MOVI_DT_CANCELAMENTO IS NULL").select(columns).distinct()
 
 
 def extract_tbau_personagem(spark):
@@ -367,7 +401,7 @@ def execute_process(options):
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
     # generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_documento_andamento")
     generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_documento_assunto")
-    # generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
+    generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
     generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
     # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_material_consumo")
     # generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_documento_endereco")
