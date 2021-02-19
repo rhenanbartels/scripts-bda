@@ -166,7 +166,118 @@ def extract_tbau_movimentacao(spark):
 
 
 def extract_tbau_personagem(spark):
-	pass
+	sf1_columns = [
+		col("PESF_PESS_DK").alias("PESFDK"),
+        col("PESF_SEXO").alias("SEX"),
+		col("ESCO_DESCRICAO").alias("ESCOL"),
+		col("ECIV_DESCRICAO").alias("ECIVIL"),
+		col("CORP_DESCRICAO").alias("CPELE"),
+		col("PESF_DT_NASC").alias("DT_NASC"),
+	]
+
+	sf2_columns = [
+		col("ENPE_PESS_DK").alias("ENPEDK"),
+        col("ENDC_CEP").alias("ECEP"),
+		col("ECIDA"),
+		col("EUFED"),
+		col("EBAIR"),
+	]
+
+	columns = [
+		col("PERS_PESS_DK").alias("DPSG_PERS_PESS_DK"),
+        col("PERS_DOCU_DK").alias("DPSG_DOCU_DK"),
+		col("PESS_NM_PESSOA").alias("DPSG_PESS_NM_PESSOA"),
+		col("TPPE_DESCRICAO").alias("DPSG_TPPE_DESCRICAO"),
+		col("TPAT_DS_AUTORIDADE").alias("DPSG_TPAT_DS_AUTORIDADE"),
+		col("REND_DESCRICAO").alias("DPSG_REND_DESCRICAO"),
+		col("PESS_IN_TP_PESSOA").alias("DPSG_PESS_IN_TP_PESSOA"),
+        col("SEX").alias("DPSG_SEXO"),
+		col("ESCOL").alias("DPSG_ESCOLARIDADE"),
+		col("ECIVIL").alias("DPSG_ESTADO_CIVIL"),
+		col("CPELE").alias("DPSG_COR_PELE"),
+		col("DT_NASC").alias("DPSG_DT_NASCIMENTO"),
+		col("ECEP").alias("DPSG_CEP_PERSONAGEM"),
+		col("EBAIR").alias("DPSG_BAIRRO_PERSONAGEM"),
+		col("ECIDA").alias("DPSG_CIDADE_PERSONAGEM"),
+		col("EUFED").alias("DPSG_UF_PERSONAGEM"),
+	]
+
+	pessoa_fisica = spark.table("%s.mcpr_pessoa_fisica" % options["schema_exadata"])
+	escolaridade = spark.table("%s.mcpr_escolaridade" % options["schema_exadata"])
+	pessoa_escolaridade = pessoa_fisica.join(escolaridade, pessoa_fisica.PESF_ESCO_DK == escolaridade.ESCO_DK, "left")
+	estado_civil = spark.table("%s.mcpr_estado_civil" % options["schema_exadata"])
+	pessoa_estado_civil = pessoa_escolaridade.join(estado_civil, pessoa_escolaridade.PESF_ECIV_DK == estado_civil.ECIV_DK, "left")
+	cor_pele = spark.table("%s.mcpr_cor_pele" % options["schema_exadata"])
+	pessoa_cor_pele = pessoa_estado_civil.join(cor_pele, pessoa_estado_civil.PESF_CORP_DK == cor_pele.CORP_DK, "left")
+	sf1 = pessoa_cor_pele.select(sf1_columns).distinct()
+
+	end_pes = spark.table("%s.mcpr_endereco_pessoa" % options["schema_exadata"])
+	endereco = spark.table("%s.mcpr_enderecos" % options["schema_exadata"]).select(
+		["ENDC_DK", "ENDC_BAIR_DK", "ENDC_NM_BAIRRO", "ENDC_CEP", "ENDC_CIDA_DK", "ENDC_NM_CIDADE", "ENDC_NM_ESTADO", "ENDC_UFED_DK"]
+	)
+	endereco_pessoa = end_pes.join(endereco, end_pes.ENPE_ENDC_DK == endereco.ENDC_DK, "left")
+	cidade = spark.table("%s.mprj_cidade" % options["schema_exadata"])
+	endereco_cidade = endereco_pessoa.join(cidade, endereco_pessoa.ENDC_CIDA_DK == cidade.CIDA_DK, "left")
+	uf = spark.table("%s.mprj_uf" % options["schema_exadata"])
+	endereco_uf = endereco_cidade.join(uf, endereco_cidade.CIDA_UFED_DK == uf.UFED_DK, "left")
+	bairro = spark.table("%s.mprj_bairro" % options["schema_exadata"])
+	endereco_bairro = endereco_uf.join(
+		bairro,
+		[
+			endereco_uf.ENDC_CIDA_DK == bairro.BAIR_CIDA_DK,
+			endereco_uf.ENDC_BAIR_DK == bairro.BAIR_DK,
+		],
+		"left"
+	).withColumn(
+		'ECIDA',
+        coalesce(
+			col('CIDA_NM_CIDADE'),
+            col('ENDC_NM_CIDADE')
+        )
+    ).withColumn(
+		'EUFED',
+        coalesce(
+			col('UFED_SIGLA'),
+            col('ENDC_NM_ESTADO')
+        )
+    ).withColumn(
+		'EBAIR',
+        coalesce(
+			col('BAIR_NM_BAIRRO'),
+            col('ENDC_NM_BAIRRO')
+        )
+    )
+	sf2 = endereco_bairro.select(sf2_columns).distinct()
+
+	personagem = spark.table("%s.mcpr_personagem" % options["schema_exadata"])
+	tipo_personagem = spark.table("%s.mcpr_tp_personagem" % options["schema_exadata"])
+	personagem_tipo = personagem.join(tipo_personagem, personagem.PERS_TPPE_DK == tipo_personagem.TPPE_DK, "inner")
+	pessoa = spark.table("%s.mcpr_pessoa" % options["schema_exadata"])
+	personagem_pessoa = personagem_tipo.join(pessoa, personagem_tipo.PERS_PESS_DK == pessoa.PESS_DK, "inner")
+	tipo_autoridade = spark.table("%s.mcpr_tp_autoridade" % options["schema_exadata"])
+	personagem_autoridade = personagem_pessoa.join(tipo_autoridade, personagem_pessoa.PERS_TPAT_DK == tipo_autoridade.TPAT_DK, "left")
+	perfil = spark.table("%s.mcpr_perfil" % options["schema_exadata"])
+	personagem_perfil = personagem_autoridade.join(perfil, personagem_autoridade.PERS_PESF_DK == perfil.PERF_PESF_PESS_DK, "left")
+	renda = spark.table("%s.mcpr_faixa_renda" % options["schema_exadata"])
+	personagem_renda = personagem_perfil.join(renda, personagem_perfil.PERF_REND_DK == renda.REND_DK, "left")
+	personagem_sf1 = personagem_renda.join(
+		sf1,
+		[
+			sf1.PESFDK == personagem_renda.PERS_PESS_DK,
+			personagem_renda.PESS_IN_TP_PESSOA.isin(['I', 'J']) == False, 
+		],
+		"left"
+	)
+	personagem_sf2 = personagem_sf1.join(
+		sf2,
+		[
+			sf2.ENPEDK == personagem_sf1.PERS_PESS_DK,
+			personagem_sf1.PESS_IN_TP_PESSOA != 'I',
+		],
+		"left"
+	)
+
+	return personagem_sf2.filter("PERS_DT_FIM IS NULL").select(columns).distinct()
 
 
 def extract_tbau_consumo(spark):
@@ -257,9 +368,10 @@ def execute_process(options):
     # generate_tbau(spark, extract_tbau_andamento, schema_exadata_aux, "tbau_documento_andamento")
     generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_documento_assunto")
     # generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
-    # generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
+    generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
     # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_material_consumo")
     # generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_documento_endereco")
+	#TODO Adicionar mprj_tp_logradouro para liberar os endereços
 
 
 if __name__ == "__main__":
