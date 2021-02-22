@@ -449,7 +449,7 @@ def execute_process(options):
 
     sc = spark.sparkContext
 
-    # schema_exadata = options['schema_exadata']
+    #schema_exadata = options['schema_exadata']
     schema_exadata_aux = options['schema_exadata_aux']
 	
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
@@ -458,9 +458,8 @@ def execute_process(options):
     generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
     generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
     # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_material_consumo")
-    # generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_documento_endereco")
-	#TODO Adicionar mprj_tp_logradouro para liberar os endereços
-
+    generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_documento_endereco")
+	
 
 if __name__ == "__main__":
 
