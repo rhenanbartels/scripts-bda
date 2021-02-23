@@ -1213,6 +1213,30 @@ params = {
             "update_date_table_jdbc": "",
             "table_hive": "mprj_tp_orgao_ext"
         },
+        {
+            "table_jdbc": "MPRJ.MPRJ_CIDADE",
+            "pk_table_jdbc": "CIDA_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_cidade"
+        },
+        {
+            "table_jdbc": "MPRJ.MPRJ_UF",
+            "pk_table_jdbc": "UFED_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_uf"
+        },
+        {
+            "table_jdbc": "MPRJ.MPRJ_BAIRRO",
+            "pk_table_jdbc": "BAIR_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_bairro"
+        },
+        {
+            "table_jdbc": "MPRJ.MPRJ_TP_LOGRADOURO",
+            "pk_table_jdbc": "TPLO_DK",
+            "update_date_table_jdbc": "",
+            "table_hive": "mprj_tp_logradouro"
+        },
         # Schema RH
         {
             "table_jdbc": "RH.FUNCIONARIO",
