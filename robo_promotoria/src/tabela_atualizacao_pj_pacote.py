@@ -24,6 +24,7 @@ CUSTOM_MAPPINGS = [
     (24, "Tutela Coletiva - Meio Ambiente e Consumidor", (400564,)),
     (25, "Tutela Coletiva - Cidadania Ampla", (400540, 913962)),
     (26, "Tutela Coletiva - Cidadania Pura", (936533,)),
+    (15, "Infância Ampla", (101187,)),
 ]
 LIST_TO_REMOVE = tuple(x for m in CUSTOM_MAPPINGS for x in m[2])
 
