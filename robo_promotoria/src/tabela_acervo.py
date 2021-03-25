@@ -25,17 +25,17 @@ def execute_process(options):
 
     table = spark.sql("""
             SELECT 
-                docu_orgi_orga_dk_responsavel AS cod_orgao, 
+                D.docu_orgi_orga_dk_responsavel AS cod_orgao, 
                 cod_pct as cod_atribuicao,
-                count(docu_dk) as acervo,
+                count(D.docu_dk) as acervo,
                 docu_cldc_dk as tipo_acervo
-            FROM {}.mcpr_documento
-                LEFT JOIN {}.atualizacao_pj_pacote ON docu_orgi_orga_dk_responsavel = id_orgao
-                
-            WHERE 
-                docu_fsdc_dk = 1
+            FROM {0}.mcpr_documento D
+            LEFT JOIN {1}.atualizacao_pj_pacote ON D.docu_orgi_orga_dk_responsavel = id_orgao
+            LEFT JOIN {1}.tb_documentos_arquivados A ON D.docu_dk = A.docu_dk 
+            WHERE docu_fsdc_dk = 1
             AND docu_tpst_dk != 11
-            GROUP BY docu_orgi_orga_dk_responsavel, cod_pct, docu_cldc_dk
+            AND A.docu_dk IS NULL
+            GROUP BY D.docu_orgi_orga_dk_responsavel, cod_pct, docu_cldc_dk
     """.format(schema_exadata, schema_exadata_aux))
 
     table = table.withColumn(
