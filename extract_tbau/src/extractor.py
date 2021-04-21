@@ -466,6 +466,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create tables tbau")
     parser.add_argument('-e','--schemaExadata', metavar='schemaExadata', type=str, help='')
     parser.add_argument('-a','--schemaExadataAux', metavar='schemaExadataAux', type=str, help='')
+    parser.add_argument('-v','--schemaExadataViews', metavar='schemaExadataViews', type=str, help='')
     parser.add_argument('-i','--impalaHost', metavar='impalaHost', type=str, help='')
     parser.add_argument('-o','--impalaPort', metavar='impalaPort', type=str, help='')
     args = parser.parse_args()
