@@ -369,7 +369,74 @@ def extract_tbau_personagem(spark):
 
 
 def extract_tbau_consumo(spark):
-	pass
+	columns = [
+		col("cd_bem_servico").alias("tmat_cd_bem_servico"),
+		col("ds_bem_generico").alias("tmat_ds_bem_generico"),
+		col("nm_bem_servico").alias("tmat_nm_bem_servico"),
+		col("ds_completa").alias("tmat_ds_completa"),
+		col("mes_ano_consumo").alias("tmat_mes_ano_consumo"),
+		col("orlw_dk").alias("tmat_orgi_dk"),
+		col("orlw_orgi_nm_orgao").alias("tmat_orgi_nm_orgao"),
+		col("orlw_cofo_nm_foro").alias("tmat_cofo_nm_foro"),
+		col("orlw_cmrc_nm_comarca").alias("tmat_cmrc_nm_comarca"),
+		col("orlw_regi_nm_regiao").alias("tmat_regi_nm_regiao"),
+		col("sum_atendido").alias("tmat_qt_consumida"),
+		col("sg_um").alias("tmat_sg_unidade_medida"),
+		col("ds_um").alias("tmat_ds_unidade_medida"),
+		col("sum_consumido").alias("tmat_vl_consumido"),
+	]
+	pre_columns = [
+		col("cd_bem_servico"),
+		col("ds_bem_generico"),
+		col("nm_bem_servico"),
+		col("ds_completa"),
+		col("qt_atendido"),
+		col("sg_um"),
+		col("ds_um"),
+		col("vl_consumido"),
+		col("mes_ano_consumo"),
+		col("orlw_dk"),
+		col("orlw_orgi_nm_orgao"),
+		col("orlw_cofo_nm_foro"),
+		col("orlw_cmrc_nm_comarca"),
+		col("orlw_regi_nm_regiao"),
+	]
+
+	requisicao = spark.table("%s.asin_ax_v_requisicao_consulta" % options["schema_exadata_views"]).\
+		filter("CD_SITUACAO_REQ_ATUAL = '003'").\
+		filter("QT_ATENDIDO IS NOT NULL").\
+		withColumn("vl_consumido", col("vl_atendido")/100).\
+		withColumn("mes_ano_consumo", trunc("dt_situacao_req_atual", "month"))
+	situacao = spark.table("%s.asin_ax_situacao_req" % options["schema_exadata_views"])
+	ua = spark.table("%s.asin_cr_ua" % options["schema_exadata_views"]).select(col("CD_UA").alias("ua_id"))
+	servico = spark.table("%s.asin_cr_bem_servico" % options["schema_exadata_views"]).select([
+		col("CD_BEM_SERVICO").alias("servico_id"),
+		col("CD_BEM_GENERICO"),
+		col("nm_bem_servico"),
+		col("ds_completa"),
+		col("cd_um_elementar"),
+	])
+	generico = spark.table("%s.asin_cr_bem_generico" % options["schema_exadata_views"]).select([
+		col("CD_BEM_GENERICO").alias("generico_id"),
+		col("ds_bem_generico"),
+	])
+	umed = spark.table("%s.asin_cr_um" % options["schema_exadata_views"])
+	orgao = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"])
+
+	sit_req = requisicao.join(situacao, requisicao.CD_SITUACAO_REQ_ATUAL == situacao.CD_SITUACAO_REQ, "inner")
+	sit_ua = sit_req.join(ua, sit_req.CD_UA == ua.ua_id, "inner")
+	sit_servico = sit_ua.join(servico, sit_ua.CD_BEM_SERVICO == servico.servico_id, "inner")
+	sit_generico = sit_servico.join(generico, sit_servico.CD_BEM_GENERICO == generico.generico_id, "inner")
+	sit_umed = sit_generico.join(umed, sit_generico.cd_um_elementar == umed.CD_UM, "inner")
+	sit_orgao = sit_umed.join(orgao, sit_umed.CD_UA == orgao.ORLW_ORGI_CDORGAO, "inner").select(pre_columns)
+	result = sit_orgao.groupBy(
+			"cd_bem_servico", "ds_bem_generico", "nm_bem_servico", "ds_completa", "sg_um", "ds_um", "mes_ano_consumo", 
+			"orlw_dk", "orlw_orgi_nm_orgao", "orlw_cofo_nm_foro", "orlw_cmrc_nm_comarca", "orlw_regi_nm_regiao"
+		).sum("qt_atendido", "vl_consumido").\
+		withColumn("sum_atendido", col("sum(qt_atendido)")).\
+		withColumn("sum_consumido", col("sum(vl_consumido)"))
+	
+	return result.select(columns)
 
 
 def extract_tbau_endereco(spark):
