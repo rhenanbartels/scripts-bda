@@ -499,8 +499,9 @@ def generate_tbau(spark, generator, schema, table_name):
 	dataframe = generator(spark)
 	full_table_name = "{}.{}".format(schema, table_name)
 	
-	table_df = spark.createDataFrame(dataframe)
-	table_df.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
+	# table_df = spark.createDataFrame(dataframe)
+	# table_df.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
+	dataframe.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
 	
 	execute_compute_stats(full_table_name)
 	print("{} gravada".format(table_name))
