@@ -498,9 +498,6 @@ def extract_tbau_endereco(spark):
 def generate_tbau(spark, generator, schema, table_name):
 	dataframe = generator(spark)
 	full_table_name = "{}.{}".format(schema, table_name)
-	
-	# table_df = spark.createDataFrame(dataframe)
-	# table_df.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
 	dataframe.coalesce(20).write.format('parquet').saveAsTable(full_table_name, mode='overwrite')
 	
 	execute_compute_stats(full_table_name)
@@ -517,7 +514,6 @@ def execute_process(options):
 
     sc = spark.sparkContext
 
-    #schema_exadata = options['schema_exadata']
     schema_exadata_aux = options['schema_exadata_aux']
 	
     generate_tbau(spark, extract_tbau_documento, schema_exadata_aux, "tbau_documento")
@@ -525,7 +521,7 @@ def execute_process(options):
     generate_tbau(spark, extract_tbau_assunto, schema_exadata_aux, "tbau_documento_assunto")
     generate_tbau(spark, extract_tbau_movimentacao, schema_exadata_aux, "tbau_documento_movimentacao")
     generate_tbau(spark, extract_tbau_personagem, schema_exadata_aux, "tbau_documento_personagem")
-    # generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_material_consumo")
+    generate_tbau(spark, extract_tbau_consumo, schema_exadata_aux, "tbau_material_consumo")
     generate_tbau(spark, extract_tbau_endereco, schema_exadata_aux, "tbau_documento_endereco")
 	
 
