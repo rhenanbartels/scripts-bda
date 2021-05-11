@@ -538,7 +538,7 @@ if __name__ == "__main__":
     options = {
         'schema_exadata': args.schemaExadata, 
         'schema_exadata_aux': args.schemaExadataAux,
-	'schema_exadata_views': args.schemaExadataViews,
+        'schema_exadata_views': args.schemaExadataViews,
         'impala_host' : args.impalaHost,
         'impala_port' : args.impalaPort
     }
