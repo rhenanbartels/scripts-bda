@@ -20,7 +20,7 @@ CUSTOM_MAPPINGS = [
     (181, "Tutela Coletiva - Proteção do Idoso e da Pessoa com Deficiência", (28933866, 19028031)),
     (182, "Tutela Coletiva - Prestacionais", (24222687, 27700444, 28006690)),
     (183, "Tutela Coletiva - Meio Ambiente, Consumidor e Saúde", (400652, 1342457)),
-    (20, "Tutela Coletiva Ampla", (17216152,)),
+    (20, "Tutela Coletiva Ampla", (17216152, 31713794)),
     (24, "Tutela Coletiva - Meio Ambiente e Consumidor", (400564,)),
     (25, "Tutela Coletiva - Cidadania Ampla", (400540, 913962)),
     (26, "Tutela Coletiva - Cidadania Pura", (936533,)),
