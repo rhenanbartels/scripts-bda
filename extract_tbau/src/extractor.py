@@ -52,9 +52,9 @@ def extract_tbau_documento(spark):
 		col("DOAT_NM_VARA"),
 		col("TPST_DS_TP_SITUACAO").alias("DOAT_TPST_DS_TP_SITUACAO"),
 		col("FSDC_DS_FASE").alias("DOAT_FSDC_DS_FASE"),
-		col("cldc_cd_classe").alias("DOAT_CD_CLASSE"),
-		col("cldc_ds_classe").alias("DOAT_CLASSE"),
-		col("cldc_ds_hierarquia").alias("DOAT_CLASSE_HIERARQUIA"),
+		col("cod_mgp").alias("DOAT_CD_CLASSE"),
+		col("descricao").alias("DOAT_CLASSE"),
+		col("hierarquia").alias("DOAT_CLASSE_HIERARQUIA"),
 		col("DOAA_DT_ALTERACAO").alias("DOAT_DT_ALTERACAO"),
 	]
     documento = spark.table("%s.mcpr_documento" % options["schema_exadata"]).\
@@ -83,7 +83,7 @@ def extract_tbau_documento(spark):
 		col("ORGE_NM_ORGAO").alias("DOAT_NM_VARA"),
 	])
     tp_orgao_ext = spark.table("%s.mprj_tp_orgao_ext" % options["schema_exadata"])
-    classe_doc = spark.table("%s.mmps_classe_hierarquia" % options["schema_exadata_aux"])
+    classe_doc = spark.table("%s.mmps_classe_docto" % options["schema_exadata_aux"])
     local_resp = spark.table("%s.orgi_vw_orgao_local_atual" % options["schema_exadata"]).select([
 		col("ORLW_DK").alias("LOC_RESP_DK"),
 		col("ORLW_ORGI_TPOR_DK").alias("LOC_RESP_TPOR_DK"),
@@ -126,7 +126,7 @@ def extract_tbau_documento(spark):
     doc_fase = doc_sit.join(fase_doc, doc_sit.DOCU_FSDC_DK == fase_doc.FSDC_DK, "left")
     doc_origem = doc_fase.join(orgao_origem, doc_fase.DOCU_ORGA_DK_ORIGEM == orgao_origem.ORG_EXT_ORIGEM_DK, "left")
     doc_tp_ext = doc_origem.join(tp_orgao_ext, doc_origem.ORG_EXT_TPOE_DK == tp_orgao_ext.TPOE_DK , "left")
-    doc_classe = doc_tp_ext.join(classe_doc, doc_tp_ext.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
+    doc_classe = doc_tp_ext.join(classe_doc, doc_tp_ext.DOCU_CLDC_DK == classe_doc.ID , "left")
     # doc_classe = doc_origem.join(classe_doc, doc_origem.DOCU_CLDC_DK == classe_doc.cldc_dk , "left")
     doc_loc_resp = doc_classe.join(local_resp, doc_classe.DOCU_ORGI_ORGA_DK_RESPONSAVEL == local_resp.LOC_RESP_DK , "left")
     doc_tp_loc_resp = doc_loc_resp.join(tp_local_resp, doc_loc_resp.LOC_RESP_TPOR_DK == tp_local_resp.TP_LOC_RESP_DK , "left")
